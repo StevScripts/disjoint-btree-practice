@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Topic = "sets" | "insert" | "delete" | "mixed";
 type ProblemKind = "ds-array" | "tree-insert" | "tree-delete";
-type Difficulty = "Easy" | "Medium" | "Hard";
+type Scenario = "Basic" | "Worksheet" | "Overflow" | "Cascade" | "Borrow" | "Merge" | "Root";
 
 type TraceEvent = {
   title: string;
@@ -38,7 +38,7 @@ type Problem = {
   kind: ProblemKind;
   title: string;
   prompt: string;
-  difficulty: Difficulty;
+  scenario: Scenario;
   trace: TraceEvent[];
   answerType: "array" | "tree";
   expectedArray?: number[];
@@ -62,7 +62,22 @@ const TOPICS: { id: Topic; label: string; icon: typeof Network }[] = [
   { id: "mixed", label: "Mixed Review", icon: Shuffle },
 ];
 
-const DIFFICULTIES: Difficulty[] = ["Easy", "Medium", "Hard"];
+const SCENARIOS: Record<Topic, Scenario[]> = {
+  sets: ["Basic", "Worksheet", "Cascade"],
+  insert: ["Basic", "Overflow", "Cascade"],
+  delete: ["Basic", "Borrow", "Merge", "Root"],
+  mixed: ["Worksheet", "Overflow", "Merge", "Cascade"],
+};
+
+const SCENARIO_LABELS: Record<Scenario, string> = {
+  Basic: "Basic",
+  Worksheet: "Worksheet",
+  Overflow: "Overflow",
+  Cascade: "Cascade",
+  Borrow: "Borrow",
+  Merge: "Merge",
+  Root: "Root",
+};
 
 const emptyStats: Stats = {
   attempted: 0,
@@ -338,7 +353,7 @@ class TwoFourTree {
   }
 }
 
-function generateProblem(topic: Topic, seed: number, difficulty: Difficulty): Problem {
+function generateProblem(topic: Topic, seed: number, scenario: Scenario): Problem {
   const rng = makeRng(seed);
   const kind =
     topic === "sets"
@@ -349,20 +364,24 @@ function generateProblem(topic: Topic, seed: number, difficulty: Difficulty): Pr
           ? "tree-delete"
           : pick(rng, ["ds-array", "tree-insert", "tree-delete"] as ProblemKind[]);
 
-  if (kind === "ds-array") return generateDsArray(rng, seed, difficulty);
-  if (kind === "tree-delete") return generateTreeDelete(rng, seed, difficulty);
-  return generateTreeInsert(rng, seed, difficulty);
+  if (kind === "ds-array") return generateDsArray(rng, seed, scenario);
+  if (kind === "tree-delete") return generateTreeDelete(rng, seed, scenario);
+  return generateTreeInsert(rng, seed, scenario);
 }
 
-function generateDsArray(rng: () => number, seed: number, difficulty: Difficulty): Problem {
+function generateDsArray(rng: () => number, seed: number, scenario: Scenario): Problem {
   const settings = {
-    Easy: { sizes: [8], opCounts: [5, 6] },
-    Medium: { sizes: [10], opCounts: [8, 9] },
-    Hard: { sizes: [12, 14], opCounts: [12, 13, 14] },
-  } satisfies Record<Difficulty, { sizes: number[]; opCounts: number[] }>;
-  const n = pick(rng, settings[difficulty].sizes);
+    Basic: { sizes: [8], opCounts: [5, 6] },
+    Worksheet: { sizes: [10], opCounts: [8, 9] },
+    Overflow: { sizes: [10], opCounts: [8, 9] },
+    Borrow: { sizes: [10], opCounts: [8, 9] },
+    Merge: { sizes: [12], opCounts: [10, 11] },
+    Root: { sizes: [12], opCounts: [10, 11] },
+    Cascade: { sizes: [12, 14], opCounts: [12, 13, 14] },
+  } satisfies Record<Scenario, { sizes: number[]; opCounts: number[] }>;
+  const n = pick(rng, settings[scenario].sizes);
   const ds = new DisjointSet(n);
-  const operations = Array.from({ length: pick(rng, settings[difficulty].opCounts) }, () => {
+  const operations = Array.from({ length: pick(rng, settings[scenario].opCounts) }, () => {
     const a = Math.floor(rng() * n);
     let b = Math.floor(rng() * n);
     if (a === b) b = (b + 1) % n;
@@ -376,7 +395,7 @@ function generateDsArray(rng: () => number, seed: number, difficulty: Difficulty
     prompt: `Show the state of the array storing a disjoint set AFTER it has undergone the following operations.\n\nAssume the items in the disjoint set of size n are 0 through n-1. Assume the shorter tree is always attached to the longer tree and that if two trees of equal height are put together the tree with the higher root value is attached to the tree with the lower root value.\n\nDisjointSet dj = new DisjointSet(${n});\n${operations
       .map(([a, b]) => `dj.union(${a}, ${b});`)
       .join("\n")}`,
-    difficulty,
+    scenario,
     trace: ds.trace,
     answerType: "array",
     expectedArray: ds.parent,
@@ -384,37 +403,25 @@ function generateDsArray(rng: () => number, seed: number, difficulty: Difficulty
   };
 }
 
-function generateTreeInsert(rng: () => number, seed: number, difficulty: Difficulty): Problem {
-  const settings = {
-    Easy: { counts: [5, 6], pool: 30 },
-    Medium: { counts: [8, 10], pool: 45 },
-    Hard: { counts: [13, 15, 17], pool: 80 },
-  } satisfies Record<Difficulty, { counts: number[]; pool: number }>;
-  const values = shuffle(rng, range(settings[difficulty].pool, 3)).slice(0, pick(rng, settings[difficulty].counts));
-  const tree = new TwoFourTree();
-  values.forEach((value) => tree.insert(value));
-  const initial = cloneTree(tree.root!);
-  const candidates = range(70, 3).filter((value) => !values.includes(value));
-  let inserted = pick(rng, candidates);
-  if (difficulty !== "Easy") {
-    const target = difficulty === "Hard" ? "Split root" : "Split";
-    const harderCandidate = shuffle(rng, candidates).find((candidate) => {
-      const testTree = new TwoFourTree();
-      values.forEach((value) => testTree.insert(value));
-      testTree.trace = [];
-      testTree.insert(candidate);
-      return testTree.trace.some((event) => event.title.includes(target));
-    });
-    inserted = harderCandidate ?? inserted;
-  }
-  tree.trace = [];
-  tree.insert(inserted);
+function generateTreeInsert(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const target =
+    scenario === "Basic" || scenario === "Worksheet"
+      ? "Place"
+      : scenario === "Cascade" || scenario === "Root"
+        ? "Split root"
+        : "Split";
+  const countOptions = scenario === "Basic" ? [5, 6] : scenario === "Overflow" || scenario === "Worksheet" ? [8, 10, 11] : [13, 15, 17];
+  const pool = scenario === "Basic" ? 30 : scenario === "Overflow" || scenario === "Worksheet" ? 55 : 90;
+  const generated = findTreeOperationCase(rng, countOptions, pool, "insert", target);
+  const tree = generated.tree;
+  const initial = generated.initial;
+  const inserted = generated.value;
   return {
     id: `INS-${seed}`,
     kind: "tree-insert",
-    title: "2-4 Tree Insertion",
-    prompt: `Insert ${inserted}. If a node overflows, send up the third value out of four, matching the worksheet rule.`,
-    difficulty,
+    title: `${SCENARIO_LABELS[scenario]} Insertion Drill`,
+    prompt: `Insert ${inserted}. Focus on the overflow situation, not just the search path. If a node overflows, send up the third value out of four, matching the worksheet rule.`,
+    scenario,
     trace: tree.trace,
     answerType: "tree",
     initialTree: initial,
@@ -422,41 +429,82 @@ function generateTreeInsert(rng: () => number, seed: number, difficulty: Difficu
   };
 }
 
-function generateTreeDelete(rng: () => number, seed: number, difficulty: Difficulty): Problem {
-  const settings = {
-    Easy: { counts: [6, 7], pool: 35 },
-    Medium: { counts: [10, 12], pool: 65 },
-    Hard: { counts: [14, 16, 18], pool: 95 },
-  } satisfies Record<Difficulty, { counts: number[]; pool: number }>;
-  const values = shuffle(rng, range(settings[difficulty].pool, 3)).slice(0, pick(rng, settings[difficulty].counts));
-  const tree = new TwoFourTree();
-  values.forEach((value) => tree.insert(value));
-  const initial = cloneTree(tree.root!);
-  let deleted = pick(rng, values);
-  if (difficulty !== "Easy") {
-    const targetWords = difficulty === "Hard" ? ["Merge", "Root"] : ["Borrow", "Replace"];
-    const harderCandidate = shuffle(rng, values).find((candidate) => {
-      const testTree = new TwoFourTree();
-      values.forEach((value) => testTree.insert(value));
-      testTree.trace = [];
-      testTree.delete(candidate);
-      return testTree.trace.some((event) => targetWords.some((word) => event.title.includes(word)));
-    });
-    deleted = harderCandidate ?? deleted;
-  }
-  tree.trace = [];
-  tree.delete(deleted);
+function generateTreeDelete(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const target =
+    scenario === "Borrow"
+      ? "Borrow"
+      : scenario === "Merge" || scenario === "Cascade"
+        ? "Merge"
+        : scenario === "Root"
+          ? "Root"
+          : scenario === "Worksheet"
+            ? "Replace"
+            : "Delete";
+  const countOptions = scenario === "Basic" ? [6, 7] : scenario === "Borrow" || scenario === "Worksheet" ? [10, 12] : [14, 16, 18];
+  const pool = scenario === "Basic" ? 35 : scenario === "Borrow" || scenario === "Worksheet" ? 65 : 95;
+  const generated = findTreeOperationCase(rng, countOptions, pool, "delete", target);
+  const tree = generated.tree;
+  const initial = generated.initial;
+  const deleted = generated.value;
   return {
     id: `DEL-${seed}`,
     kind: "tree-delete",
-    title: "2-4 Tree Deletion",
-    prompt: `Delete ${deleted}. Repair underflow by borrowing from a sibling when possible; otherwise merge through the parent.`,
-    difficulty,
+    title: `${SCENARIO_LABELS[scenario]} Deletion Drill`,
+    prompt: `Delete ${deleted}. Focus on the repair case: borrow when possible, otherwise merge through the parent. Show each tree-changing step.`,
+    scenario,
     trace: tree.trace,
     answerType: "tree",
     initialTree: initial,
     expectedTree: tree.root!,
   };
+}
+
+function findTreeOperationCase(
+  rng: () => number,
+  countOptions: number[],
+  pool: number,
+  operation: "insert" | "delete",
+  target: string,
+) {
+  let fallback: { tree: TwoFourTree; initial: TreeNode; value: number } | null = null;
+
+  for (let attempt = 0; attempt < 90; attempt++) {
+    const values = shuffle(rng, range(pool, 3)).slice(0, pick(rng, countOptions));
+    const baseTree = new TwoFourTree();
+    values.forEach((value) => baseTree.insert(value));
+    if (!baseTree.root) continue;
+
+    const initial = cloneTree(baseTree.root);
+    const candidates =
+      operation === "insert"
+        ? range(pool + 20, 3).filter((value) => !values.includes(value))
+        : values;
+
+    for (const value of shuffle(rng, candidates)) {
+      const testTree = new TwoFourTree();
+      values.forEach((item) => testTree.insert(item));
+      testTree.trace = [];
+      if (operation === "insert") {
+        testTree.insert(value);
+      } else {
+        testTree.delete(value);
+      }
+
+      const matches =
+        target === "Place"
+          ? !testTree.trace.some((event) => event.title.includes("Split"))
+          : target === "Delete"
+            ? testTree.trace.some((event) => event.title.startsWith("Delete"))
+            : testTree.trace.some((event) => event.title.includes(target));
+
+      fallback = fallback ?? { tree: testTree, initial, value };
+      if (matches && testTree.root) {
+        return { tree: testTree, initial, value };
+      }
+    }
+  }
+
+  return fallback!;
 }
 
 function shuffle<T>(rng: () => number, items: T[]) {
@@ -545,7 +593,7 @@ function writeDragPayload(event: DragEvent, payload: DragPayload) {
 
 function App() {
   const [topic, setTopic] = useState<Topic>("sets");
-  const [difficulty, setDifficulty] = useState<Difficulty>("Medium");
+  const [scenario, setScenario] = useState<Scenario>("Worksheet");
   const [seed, setSeed] = useState(() => Date.now());
   const [arrayAnswer, setArrayAnswer] = useState<number[]>([]);
   const [treeSteps, setTreeSteps] = useState<TreeNode[]>([]);
@@ -557,7 +605,9 @@ function App() {
     return saved ? JSON.parse(saved) : emptyStats;
   });
 
-  const problem = useMemo(() => generateProblem(topic, seed, difficulty), [topic, seed, difficulty]);
+  const availableScenarios = SCENARIOS[topic];
+  const activeScenario = availableScenarios.includes(scenario) ? scenario : availableScenarios[0];
+  const problem = useMemo(() => generateProblem(topic, seed, activeScenario), [topic, seed, activeScenario]);
 
   useEffect(() => {
     localStorage.setItem("structure-practice-stats", JSON.stringify(stats));
@@ -617,6 +667,7 @@ function App() {
                 key={item.id}
                 onClick={() => {
                   setTopic(item.id);
+                  setScenario(SCENARIOS[item.id][0]);
                   setSeed(Date.now());
                 }}
               >
@@ -636,21 +687,21 @@ function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{problem.id} · {problem.difficulty}</p>
+            <p className="eyebrow">{problem.id} · {problem.scenario}</p>
             <h2>{problem.title}</h2>
           </div>
           <div className="topbar-actions">
-            <div className="difficulty-control" aria-label="Difficulty">
-              {DIFFICULTIES.map((level) => (
+            <div className="scenario-control" aria-label="Practice scenario">
+              {availableScenarios.map((level) => (
                 <button
-                  className={difficulty === level ? "difficulty active" : "difficulty"}
+                  className={activeScenario === level ? "scenario active" : "scenario"}
                   key={level}
                   onClick={() => {
-                    setDifficulty(level);
+                    setScenario(level);
                     setSeed(Date.now());
                   }}
                 >
-                  {level}
+                  {SCENARIO_LABELS[level]}
                 </button>
               ))}
             </div>

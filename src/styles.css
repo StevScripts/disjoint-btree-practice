@@ -141,15 +141,18 @@ h3 {
   gap: 10px;
 }
 
-.difficulty-control {
+.scenario-control {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 3px;
   padding: 3px;
   border: 1px solid oklch(0.82 0.015 235);
   border-radius: 8px;
   background: oklch(0.965 0.006 235);
 }
 
-.difficulty {
+.scenario {
   min-height: 30px;
   padding: 0 10px;
   border: 0;
@@ -160,7 +163,7 @@ h3 {
   font-weight: 750;
 }
 
-.difficulty.active {
+.scenario.active {
   background: oklch(0.52 0.13 225);
   color: oklch(0.985 0.004 235);
 }
