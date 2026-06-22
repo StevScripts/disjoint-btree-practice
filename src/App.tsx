@@ -33,6 +33,27 @@ type DragPayload =
   | { type: "new-child" }
   | { type: "tree-node"; nodeId: string };
 
+type LayoutNode = {
+  node: TreeNode;
+  x: number;
+  y: number;
+  width: number;
+};
+
+type LayoutLine = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+type TreeLayout = {
+  nodes: LayoutNode[];
+  lines: LayoutLine[];
+  width: number;
+  height: number;
+};
+
 type Problem = {
   id: string;
   kind: ProblemKind;
@@ -122,14 +143,72 @@ function normalizeTree(node: TreeNode | null): string {
   });
 }
 
-function treeLevels(root: TreeNode) {
-  const rows: TreeNode[][] = [];
-  let level = [root];
-  while (level.length > 0) {
-    rows.push(level);
-    level = level.flatMap((node) => node.children);
-  }
-  return rows;
+const TREE_NODE_HEIGHT = 48;
+const TREE_LEVEL_GAP = 88;
+const TREE_SIBLING_GAP = 34;
+const TREE_PADDING = 26;
+
+function getNodeWidth(node: TreeNode) {
+  return Math.max(72, node.keys.length * 42 + 28);
+}
+
+function buildTreeLayout(root: TreeNode): TreeLayout {
+  const nodes: LayoutNode[] = [];
+  const lines: LayoutLine[] = [];
+
+  type MeasuredTree = {
+    node: TreeNode;
+    width: number;
+    nodeWidth: number;
+    children: MeasuredTree[];
+  };
+
+  const measure = (node: TreeNode): MeasuredTree => {
+    const nodeWidth = getNodeWidth(node);
+    const childLayouts = node.children.map(measure);
+    const childrenWidth =
+      childLayouts.length === 0
+        ? 0
+        : childLayouts.reduce((total, child) => total + child.width, 0) + TREE_SIBLING_GAP * (childLayouts.length - 1);
+    const width = Math.max(nodeWidth, childrenWidth);
+    return { node, width, nodeWidth, children: childLayouts };
+  };
+
+  const place = (measured: MeasuredTree, left: number, depth: number): number => {
+    const centerX = left + measured.width / 2;
+    const y = depth * (TREE_NODE_HEIGHT + TREE_LEVEL_GAP);
+    nodes.push({ node: measured.node, x: TREE_PADDING + centerX, y: TREE_PADDING + y, width: measured.nodeWidth });
+
+    const childrenWidth =
+      measured.children.length === 0
+        ? 0
+        : measured.children.reduce((total, child) => total + child.width, 0) + TREE_SIBLING_GAP * (measured.children.length - 1);
+    let childLeft = left + (measured.width - childrenWidth) / 2;
+    measured.children.forEach((childLayout) => {
+      const childX = place(childLayout, childLeft, depth + 1);
+      const childY = (depth + 1) * (TREE_NODE_HEIGHT + TREE_LEVEL_GAP);
+      lines.push({
+        x1: TREE_PADDING + centerX,
+        y1: TREE_PADDING + y + TREE_NODE_HEIGHT,
+        x2: TREE_PADDING + childX,
+        y2: TREE_PADDING + childY,
+      });
+      childLeft += childLayout.width + TREE_SIBLING_GAP;
+    });
+
+    return centerX;
+  };
+
+  const measured = measure(root);
+  place(measured, 0, 0);
+  const maxDepth = Math.max(0, ...nodes.map((layoutNode) => Math.round((layoutNode.y - TREE_PADDING) / (TREE_NODE_HEIGHT + TREE_LEVEL_GAP))));
+
+  return {
+    nodes,
+    lines,
+    width: measured.width + TREE_PADDING * 2,
+    height: maxDepth * (TREE_NODE_HEIGHT + TREE_LEVEL_GAP) + TREE_NODE_HEIGHT + TREE_PADDING * 2,
+  };
 }
 
 class DisjointSet {
@@ -949,9 +1028,33 @@ function TreeStepBuilder({
 }
 
 function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: TreeNode) => void }) {
+  const layout = buildTreeLayout(root);
+
   return (
     <div className="tree-canvas" aria-label="B-tree drawing canvas">
-      <EditableTreeNode root={root} node={root} onChange={onChange} canRemove={false} />
+      <div className="tree-stage" style={{ width: layout.width, height: layout.height }}>
+        <svg className="tree-lines" width={layout.width} height={layout.height} aria-hidden="true">
+          {layout.lines.map((line, index) => (
+            <line
+              key={`${line.x1}-${line.x2}-${index}`}
+              x1={line.x1}
+              y1={line.y1}
+              x2={line.x2}
+              y2={line.y2}
+            />
+          ))}
+        </svg>
+        {layout.nodes.map((layoutNode) => (
+          <EditableTreeNode
+            key={layoutNode.node.id}
+            root={root}
+            node={layoutNode.node}
+            onChange={onChange}
+            canRemove={layoutNode.node.id !== root.id}
+            layoutNode={layoutNode}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -961,91 +1064,94 @@ function EditableTreeNode({
   node,
   onChange,
   canRemove,
+  layoutNode,
 }: {
   root: TreeNode;
   node: TreeNode;
   onChange: (tree: TreeNode) => void;
   canRemove: boolean;
+  layoutNode: LayoutNode;
 }) {
   return (
-    <div className="edit-node-wrap">
-      <div
-        className="edit-node"
-        draggable
-        onDragStart={(event) => writeDragPayload(event, { type: "tree-node", nodeId: node.id })}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const payload = readDragPayload(event);
-          if (!payload) return;
-          if (payload.type === "palette-key") {
-            onChange(addKeyToNode(root, node.id, payload.key));
-          }
-          if (payload.type === "tree-key") {
-            onChange(moveKey(root, payload.fromId, payload.fromIndex, node.id));
-          }
-          if (payload.type === "new-child") {
-            onChange(addChildToNode(root, node.id));
-          }
-        }}
-      >
-        <div className="key-row">
-          {node.keys.length === 0 && <span className="empty-node">empty</span>}
-          {node.keys.map((key, index) => (
-            <button
-              className="key-chip"
-              draggable
-              key={`${node.id}-${key}-${index}`}
-              onDragStart={(event) => {
-                event.stopPropagation();
-                writeDragPayload(event, { type: "tree-key", fromId: node.id, fromIndex: index });
-              }}
-              title="Drag to another node or to trash."
-            >
-              {key}
-            </button>
-          ))}
-        </div>
-        <div className="node-caption">{canRemove ? "Drag node to trash" : "Root: drop child here"}</div>
+    <div
+      className="edit-node positioned-node"
+      draggable
+      style={{
+        width: layoutNode.width,
+        left: layoutNode.x - layoutNode.width / 2,
+        top: layoutNode.y,
+      }}
+      onDragStart={(event) => writeDragPayload(event, { type: "tree-node", nodeId: node.id })}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        const payload = readDragPayload(event);
+        if (!payload) return;
+        if (payload.type === "palette-key") {
+          onChange(addKeyToNode(root, node.id, payload.key));
+        }
+        if (payload.type === "tree-key") {
+          onChange(moveKey(root, payload.fromId, payload.fromIndex, node.id));
+        }
+        if (payload.type === "new-child") {
+          onChange(addChildToNode(root, node.id));
+        }
+      }}
+    >
+      <div className="key-row">
+        {node.keys.length === 0 && <span className="empty-node">empty</span>}
+        {node.keys.map((key, index) => (
+          <button
+            className="key-chip"
+            draggable
+            key={`${node.id}-${key}-${index}`}
+            onDragStart={(event) => {
+              event.stopPropagation();
+              writeDragPayload(event, { type: "tree-key", fromId: node.id, fromIndex: index });
+            }}
+            title="Drag to another node or to trash."
+          >
+            {key}
+          </button>
+        ))}
       </div>
-
-      {node.children.length > 0 && (
-        <div className="edit-children">
-          {node.children.map((child) => (
-            <EditableTreeNode
-              canRemove
-              key={child.id}
-              root={root}
-              node={child}
-              onChange={onChange}
-            />
-          ))}
-        </div>
-      )}
+      <div className="node-caption">{canRemove ? "Drag node to trash" : "Root: drop child here"}</div>
     </div>
   );
 }
 
 function TreeView({ root, label }: { root: TreeNode; label: string }) {
+  const layout = buildTreeLayout(root);
+
   return (
     <div className="tree-view">
       <p>{label}</p>
-      <ReadOnlyTreeNode node={root} />
-    </div>
-  );
-}
-
-function ReadOnlyTreeNode({ node }: { node: TreeNode }) {
-  return (
-    <div className="readonly-node-wrap">
-      <div className="tree-node">{node.keys.join(" | ")}</div>
-      {node.children.length > 0 && (
-        <div className="readonly-children">
-          {node.children.map((child) => (
-            <ReadOnlyTreeNode key={child.id} node={child} />
+      <div className="tree-stage" style={{ width: layout.width, height: layout.height }}>
+        <svg className="tree-lines" width={layout.width} height={layout.height} aria-hidden="true">
+          {layout.lines.map((line, index) => (
+            <line
+              key={`${line.x1}-${line.x2}-${index}`}
+              x1={line.x1}
+              y1={line.y1}
+              x2={line.x2}
+              y2={line.y2}
+            />
           ))}
-        </div>
-      )}
+        </svg>
+        {layout.nodes.map((layoutNode) => (
+          <div
+            className="tree-node positioned-node"
+            key={layoutNode.node.id}
+            style={{
+              width: layoutNode.width,
+              left: layoutNode.x - layoutNode.width / 2,
+              top: layoutNode.y,
+            }}
+          >
+            {layoutNode.node.keys.join(" | ")}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -457,20 +457,33 @@ button:disabled {
   background: oklch(0.965 0.006 235);
 }
 
-.edit-node-wrap {
+.tree-stage {
   position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 30px;
   min-width: max-content;
 }
 
+.tree-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tree-lines line {
+  stroke: oklch(0.18 0.012 245);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+
+.positioned-node {
+  position: absolute;
+}
+
 .edit-node {
-  position: relative;
   z-index: 1;
   display: grid;
   gap: 10px;
-  min-width: 142px;
+  min-width: 72px;
+  min-height: 48px;
   padding: 10px;
   border: 2px solid oklch(0.38 0.035 245);
   border-radius: 8px;
@@ -517,57 +530,6 @@ button:disabled {
   text-align: center;
 }
 
-.edit-children {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  gap: 28px;
-  min-width: max-content;
-  padding-top: 16px;
-}
-
-.edit-children::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 2px;
-  height: 16px;
-  background: oklch(0.42 0.025 245);
-}
-
-.edit-children > .edit-node-wrap::before {
-  content: "";
-  position: absolute;
-  top: -16px;
-  left: 50%;
-  width: 2px;
-  height: 16px;
-  background: oklch(0.42 0.025 245);
-}
-
-.edit-children > .edit-node-wrap::after {
-  content: "";
-  position: absolute;
-  top: -16px;
-  left: 50%;
-  right: -50%;
-  height: 2px;
-  background: oklch(0.42 0.025 245);
-}
-
-.edit-children > .edit-node-wrap:first-child::after {
-  left: 50%;
-}
-
-.edit-children > .edit-node-wrap:last-child::after {
-  right: 50%;
-}
-
-.edit-children > .edit-node-wrap:only-child::after {
-  display: none;
-}
-
 .tree-view {
   overflow-x: auto;
   padding: 12px;
@@ -583,17 +545,7 @@ button:disabled {
   font-weight: 700;
 }
 
-.readonly-node-wrap {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 24px;
-  min-width: max-content;
-  margin: 6px 0;
-}
-
 .tree-node {
-  position: relative;
   z-index: 1;
   display: inline-flex;
   align-items: center;
@@ -607,53 +559,6 @@ button:disabled {
   color: oklch(0.17 0.02 245);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 800;
-}
-
-.readonly-children {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  gap: 22px;
-  min-width: max-content;
-  padding-top: 16px;
-}
-
-.readonly-children::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 2px;
-  height: 16px;
-  background: oklch(0.42 0.025 245);
-}
-
-.readonly-children > .readonly-node-wrap::before {
-  content: "";
-  position: absolute;
-  top: -16px;
-  left: 50%;
-  width: 2px;
-  height: 16px;
-  background: oklch(0.42 0.025 245);
-}
-
-.readonly-children > .readonly-node-wrap::after {
-  content: "";
-  position: absolute;
-  top: -16px;
-  left: 50%;
-  right: -50%;
-  height: 2px;
-  background: oklch(0.42 0.025 245);
-}
-
-.readonly-children > .readonly-node-wrap:last-child::after {
-  right: 50%;
-}
-
-.readonly-children > .readonly-node-wrap:only-child::after {
-  display: none;
 }
 
 .review {
