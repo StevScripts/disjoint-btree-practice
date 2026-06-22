@@ -732,6 +732,33 @@ button:focus-visible {
   stroke-width: 1.8;
 }
 
+.rb-loose-canvas-piece {
+  z-index: 3;
+  width: max-content;
+  min-width: 110px;
+  cursor: grab;
+}
+
+.rb-loose-canvas-piece:active {
+  cursor: grabbing;
+}
+
+.rb-loose-canvas-piece .tree-view {
+  padding: 8px;
+  border-color: oklch(0.72 0.08 230 / 0.58);
+  background: oklch(0.16 0.024 250 / 0.94);
+  box-shadow: 0 18px 32px oklch(0.06 0.02 250 / 0.34);
+}
+
+.rb-loose-canvas-piece .tree-view p {
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+}
+
+.rb-loose-canvas-piece .tree-lines line {
+  stroke-width: 1.8;
+}
+
 .tree-workbench {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);

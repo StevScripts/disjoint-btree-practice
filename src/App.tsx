@@ -67,6 +67,12 @@ type RBNode = {
   right: RBNode | null;
 };
 
+type LooseRBSubtree = {
+  node: RBNode;
+  x: number;
+  y: number;
+};
+
 type DragPayload =
   | { type: "ds-node"; index: number }
   | { type: "palette-key"; key: number }
@@ -2471,7 +2477,7 @@ function RBStepBuilder({
   const currentTree = steps[currentStep];
   const [paletteKey, setPaletteKey] = useState("");
   const [paletteColor, setPaletteColor] = useState<RBColor>("red");
-  const [looseSubtrees, setLooseSubtrees] = useState<RBNode[]>([]);
+  const [looseSubtrees, setLooseSubtrees] = useState<LooseRBSubtree[]>([]);
 
   useEffect(() => {
     setLooseSubtrees([]);
@@ -2512,7 +2518,10 @@ function RBStepBuilder({
     const result = removeRBNodeKeepChildren(currentTree, payload.nodeId);
     if (result.tree) updateCurrentTree(result.tree);
     if (result.loose.length > 0) {
-      setLooseSubtrees((items) => [...items, ...result.loose]);
+      setLooseSubtrees((items) => [
+        ...items,
+        ...result.loose.map((node, index) => ({ node, x: 28 + index * 28, y: 28 + index * 36 })),
+      ]);
     }
   };
 
@@ -2521,17 +2530,34 @@ function RBStepBuilder({
     const result = detachRBNode(currentTree, payload.nodeId);
     if (!result.tree || !result.detached) return;
     updateCurrentTree(result.tree);
-    setLooseSubtrees((items) => [...items, result.detached!]);
+    setLooseSubtrees((items) => [...items, { node: result.detached!, x: 32, y: 32 }]);
+  };
+
+  const detachNodeToCanvas = (nodeId: string, x: number, y: number) => {
+    if (nodeId === currentTree.id) return;
+    const result = detachRBNode(currentTree, nodeId);
+    if (!result.tree || !result.detached) return;
+    updateCurrentTree(result.tree);
+    setLooseSubtrees((items) => [...items, { node: result.detached!, x: Math.max(12, x - 44), y: Math.max(12, y - 44) }]);
+  };
+
+  const moveLooseSubtree = (looseId: string, x: number, y: number) => {
+    setLooseSubtrees((items) => items.map((item) => (
+      item.node.id === looseId
+        ? { ...item, x: Math.max(12, x - 44), y: Math.max(12, y - 44) }
+        : item
+    )));
   };
 
   const attachLooseSubtree = (looseId: string, targetId: string, side: "left" | "right") => {
-    const subtree = looseSubtrees.find((item) => item.id === looseId);
+    const loose = looseSubtrees.find((item) => item.node.id === looseId);
+    const subtree = loose?.node;
     if (!subtree) return;
     const result = attachRBSubtree(currentTree, targetId, side, subtree);
     updateCurrentTree(result.tree);
     setLooseSubtrees((items) => [
-      ...items.filter((item) => item.id !== looseId),
-      ...(result.replaced ? [result.replaced] : []),
+      ...items.filter((item) => item.node.id !== looseId),
+      ...(result.replaced ? [{ node: result.replaced, x: loose?.x ?? 32, y: loose?.y ?? 32 }] : []),
     ]);
   };
 
@@ -2611,12 +2637,12 @@ function RBStepBuilder({
                 {looseSubtrees.map((subtree) => (
                   <div
                     className="loose-subtree-preview"
-                    key={subtree.id}
+                    key={subtree.node.id}
                     draggable
-                    onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.id })}
+                    onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.node.id })}
                     title="Drag this subtree onto a left or right slot."
                   >
-                    <RBTreeView root={subtree} label={`Loose root ${subtree.key}`} />
+                    <RBTreeView root={subtree.node} label={`Loose root ${subtree.node.key}`} />
                   </div>
                 ))}
               </div>
@@ -2627,8 +2653,15 @@ function RBStepBuilder({
         </aside>
 
         <div>
-          <p className="hint">Use the side tray to detach subtrees. Trash removes only the dropped node and keeps its children in the tray. Drop beside a node to infer left or right, or use the L and R slots directly.</p>
-          <EditableRBTree root={currentTree} onChange={updateCurrentTree} onAttachLoose={attachLooseSubtree} />
+          <p className="hint">Use the side tray to detach subtrees. Trash removes only the dropped node and keeps its children in the tray. Drop beside a node to infer left or right, or use the L and R slots directly. Drop a dragged node into empty canvas space to leave it unattached.</p>
+          <EditableRBTree
+            root={currentTree}
+            looseSubtrees={looseSubtrees}
+            onChange={updateCurrentTree}
+            onAttachLoose={attachLooseSubtree}
+            onDetachNode={detachNodeToCanvas}
+            onMoveLoose={moveLooseSubtree}
+          />
         </div>
       </div>
     </div>
@@ -2637,18 +2670,24 @@ function RBStepBuilder({
 
 function EditableRBTree({
   root,
+  looseSubtrees,
   onChange,
   onAttachLoose,
+  onDetachNode,
+  onMoveLoose,
 }: {
   root: RBNode;
+  looseSubtrees: LooseRBSubtree[];
   onChange: (tree: RBNode | null) => void;
   onAttachLoose: (looseId: string, targetId: string, side: "left" | "right") => void;
+  onDetachNode: (nodeId: string, x: number, y: number) => void;
+  onMoveLoose: (looseId: string, x: number, y: number) => void;
 }) {
   const layout = buildRBTreeLayout(root);
 
   const dropNearNode = (event: DragEvent<HTMLDivElement>) => {
     const payload = readDragPayload(event);
-    if (payload?.type !== "rb-palette-node" && payload?.type !== "rb-loose-node") return;
+    if (payload?.type !== "rb-palette-node" && payload?.type !== "rb-loose-node" && payload?.type !== "rb-node") return;
 
     const stage = event.currentTarget.querySelector(".tree-stage");
     const bounds = stage?.getBoundingClientRect();
@@ -2667,13 +2706,23 @@ function EditableRBTree({
       })
       .sort((a, b) => a.distance - b.distance)[0];
 
-    if (!closest || closest.distance > 150) return;
+    if (!closest || closest.distance > 150) {
+      if (payload.type === "rb-node") {
+        onDetachNode(payload.nodeId, dropX, dropY);
+      }
+      if (payload.type === "rb-loose-node") {
+        onMoveLoose(payload.looseId, dropX, dropY);
+      }
+      return;
+    }
 
     const side = dropX < closest.layoutNode.x ? "left" : "right";
     if (payload.type === "rb-palette-node") {
       onChange(addRBChild(root, closest.layoutNode.node.id, side, payload.key, payload.color));
-    } else {
+    } else if (payload.type === "rb-loose-node") {
       onAttachLoose(payload.looseId, closest.layoutNode.node.id, side);
+    } else if (payload.nodeId !== closest.layoutNode.node.id) {
+      onDetachNode(payload.nodeId, dropX, dropY);
     }
   };
 
@@ -2705,6 +2754,18 @@ function EditableRBTree({
             onChange={onChange}
             onAttachLoose={onAttachLoose}
           />
+        ))}
+        {looseSubtrees.map((subtree) => (
+          <div
+            className="rb-loose-canvas-piece positioned-node"
+            key={subtree.node.id}
+            draggable
+            style={{ left: subtree.x, top: subtree.y }}
+            onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.node.id })}
+            title="Unattached subtree. Drag near a node to reattach."
+          >
+            <RBTreeView root={subtree.node} label={`Loose root ${subtree.node.key}`} />
+          </div>
         ))}
       </div>
     </div>
