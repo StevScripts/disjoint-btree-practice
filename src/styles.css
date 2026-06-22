@@ -448,6 +448,51 @@ button:disabled {
   background: oklch(0.88 0.06 155);
 }
 
+.color-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid oklch(0.82 0.015 235);
+  border-radius: 8px;
+  background: oklch(0.965 0.006 235);
+}
+
+.color-toggle button {
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(0.38 0.018 245);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.color-toggle button.active {
+  background: oklch(0.3 0.018 245);
+  color: oklch(0.985 0.004 235);
+}
+
+.rb-palette-chip {
+  min-height: 42px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 900;
+}
+
+.rb-palette-chip.red {
+  border-color: oklch(0.48 0.16 25);
+  background: oklch(0.58 0.18 25);
+  color: oklch(0.985 0.004 25);
+}
+
+.rb-palette-chip.black {
+  border-color: oklch(0.24 0.012 245);
+  background: oklch(0.2 0.012 245);
+  color: oklch(0.985 0.004 235);
+}
+
 .tree-canvas {
   overflow-x: auto;
   padding: 18px;
@@ -558,6 +603,80 @@ button:disabled {
   color: oklch(0.17 0.02 245);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 800;
+}
+
+.rb-edit-node {
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 86px;
+  transform: translateX(-16px);
+}
+
+.rb-node {
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 900;
+  box-shadow: 0 1px 2px oklch(0.18 0.012 245 / 0.14);
+}
+
+button.rb-node {
+  padding: 0;
+}
+
+.rb-node.red {
+  border-color: oklch(0.42 0.15 25);
+  background: oklch(0.55 0.19 25);
+  color: oklch(0.985 0.004 25);
+}
+
+.rb-node.black {
+  border-color: oklch(0.16 0.012 245);
+  background: oklch(0.21 0.012 245);
+  color: oklch(0.985 0.004 235);
+}
+
+.node-colors {
+  width: 66px;
+}
+
+.node-colors button {
+  min-height: 24px;
+  font-size: 0.72rem;
+}
+
+.rb-child-drops {
+  display: grid;
+  grid-template-columns: repeat(2, 28px);
+  gap: 5px;
+}
+
+.rb-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  border: 1px dashed oklch(0.58 0.06 225);
+  border-radius: 6px;
+  background: oklch(0.93 0.025 225);
+  color: oklch(0.34 0.04 245);
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.rb-drop.filled {
+  border-style: solid;
+  border-color: oklch(0.78 0.012 235);
+  background: oklch(0.955 0.006 235);
+  color: oklch(0.58 0.012 245);
 }
 
 .modal-backdrop {
