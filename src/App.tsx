@@ -68,6 +68,7 @@ type RBNode = {
 };
 
 type DragPayload =
+  | { type: "ds-node"; index: number }
   | { type: "palette-key"; key: number }
   | { type: "tree-key"; fromId: string; fromIndex: number }
   | { type: "new-child" }
@@ -1708,7 +1709,7 @@ function App() {
     setResult("idle");
     setShowAnswer(false);
     if (problem.answerType === "array") {
-      setArrayAnswer(Array(problem.expectedArray?.length ?? 0).fill(Number.NaN));
+      setArrayAnswer(range(problem.expectedArray?.length ?? 0));
       setQuizAnswers({});
       setTreeSteps([]);
       setRbSteps([]);
@@ -1767,7 +1768,9 @@ function App() {
   const accuracy = stats.attempted === 0 ? 0 : Math.round((stats.correct / stats.attempted) * 100);
   const explanation = buildExplanation(problem);
   const answerMode =
-    problem.answerType === "array"
+    problem.kind === "ds-array"
+      ? "Forest drawing"
+      : problem.answerType === "array"
       ? "Array answer"
       : problem.answerType === "tree"
         ? "2-4 tree drawing"
@@ -1881,7 +1884,13 @@ function App() {
               <button className="primary" onClick={checkAnswer}>Check</button>
             </div>
           </div>
-          {problem.answerType === "array" ? (
+          {problem.answerType === "array" && problem.kind === "ds-array" ? (
+            <DisjointSetBuilder
+              indexes={problem.indexes ?? []}
+              parents={arrayAnswer}
+              onChange={setArrayAnswer}
+            />
+          ) : problem.answerType === "array" ? (
             <ArrayAnswer
               indexes={problem.indexes ?? []}
               values={arrayAnswer}
@@ -2113,6 +2122,173 @@ function ArrayView({ indexes, values }: { indexes: number[]; values: number[] })
       {indexes.map((index) => <div className="array-cell muted" key={`i-${index}`}>{index}</div>)}
       <div className="array-label">Value</div>
       {values.map((value, index) => <div className="array-cell" key={`v-${index}`}>{value}</div>)}
+    </div>
+  );
+}
+
+type DsLayoutNode = {
+  index: number;
+  x: number;
+  y: number;
+};
+
+function buildDsForestLayout(parents: number[]) {
+  const nodeSize = 46;
+  const siblingGap = 36;
+  const treeGap = 56;
+  const levelGap = 86;
+  const padding = 30;
+  const children = parents.map((): number[] => []);
+  parents.forEach((parent, index) => {
+    if (parent !== index && parent >= 0 && parent < parents.length) {
+      children[parent].push(index);
+    }
+  });
+  children.forEach((items) => items.sort((a, b) => a - b));
+
+  const roots = parents.map((parent, index) => parent === index ? index : -1).filter((index) => index >= 0);
+  const measure = (index: number): number => {
+    const childWidths = children[index].map(measure);
+    if (childWidths.length === 0) return nodeSize;
+    return Math.max(nodeSize, childWidths.reduce((total, width) => total + width, 0) + siblingGap * (childWidths.length - 1));
+  };
+
+  const nodes: DsLayoutNode[] = [];
+  const lines: LayoutLine[] = [];
+  let maxY = padding + nodeSize;
+
+  const place = (index: number, left: number, depth: number): number => {
+    const width = measure(index);
+    const centerX = left + width / 2;
+    const y = padding + depth * levelGap;
+    nodes.push({ index, x: centerX, y });
+    maxY = Math.max(maxY, y + nodeSize);
+
+    const childWidths = children[index].map(measure);
+    const childrenWidth = childWidths.length === 0 ? 0 : childWidths.reduce((total, value) => total + value, 0) + siblingGap * (childWidths.length - 1);
+    let childLeft = left + (width - childrenWidth) / 2;
+    children[index].forEach((child, childIndex) => {
+      const childCenterX = place(child, childLeft, depth + 1);
+      const childY = padding + (depth + 1) * levelGap;
+      lines.push({
+        x1: centerX,
+        y1: y + nodeSize,
+        x2: childCenterX,
+        y2: childY,
+      });
+      childLeft += childWidths[childIndex] + siblingGap;
+    });
+    return centerX;
+  };
+
+  let left = padding;
+  roots.forEach((root) => {
+    const width = measure(root);
+    place(root, left, 0);
+    left += width + treeGap;
+  });
+
+  return {
+    nodes: nodes.map((node) => ({ ...node, x: node.x })),
+    lines,
+    width: Math.max(620, left - treeGap + padding),
+    height: maxY + padding,
+    nodeSize,
+  };
+}
+
+function createsDsCycle(parents: number[], child: number, parent: number) {
+  let current = parent;
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    if (current === child) return true;
+    seen.add(current);
+    if (parents[current] === current) return false;
+    current = parents[current];
+  }
+  return true;
+}
+
+function DisjointSetBuilder({
+  indexes,
+  parents,
+  onChange,
+}: {
+  indexes: number[];
+  parents: number[];
+  onChange: (parents: number[]) => void;
+}) {
+  const [selected, setSelected] = useState<number | null>(null);
+  const layout = buildDsForestLayout(parents.length === indexes.length ? parents : range(indexes.length));
+
+  const setParent = (child: number, parent: number) => {
+    if (child < 0 || parent < 0 || child >= parents.length || parent >= parents.length) return;
+    if (child !== parent && createsDsCycle(parents, child, parent)) return;
+    const next = [...parents];
+    next[child] = parent;
+    onChange(next);
+    setSelected(null);
+  };
+
+  const handleNodeClick = (index: number) => {
+    if (selected === null) {
+      setSelected(index);
+      return;
+    }
+    setParent(selected, index);
+  };
+
+  return (
+    <div className="ds-builder">
+      <div className="ds-toolbar">
+        <span>{selected === null ? "Choose a child node" : `Node ${selected}: choose its parent`}</span>
+        <div className="panel-tools">
+          <button className="secondary compact" onClick={() => setSelected(null)} disabled={selected === null}>
+            Cancel
+          </button>
+          <button className="secondary compact" onClick={() => onChange(range(indexes.length))}>
+            Reset
+          </button>
+        </div>
+      </div>
+      <div className="ds-canvas" aria-label="Disjoint set forest builder">
+        <div className="ds-stage" style={{ width: layout.width, height: layout.height }}>
+          <svg className="tree-lines" width={layout.width} height={layout.height} aria-hidden="true">
+            {layout.lines.map((line, index) => (
+              <line key={`${line.x1}-${line.y1}-${index}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
+            ))}
+          </svg>
+          {layout.nodes.map((node) => (
+            <button
+              className={[
+                "ds-node",
+                selected === node.index ? "selected" : "",
+                parents[node.index] === node.index ? "root" : "",
+              ].filter(Boolean).join(" ")}
+              draggable
+              key={node.index}
+              onClick={() => handleNodeClick(node.index)}
+              onDragStart={(event) => writeDragPayload(event, { type: "ds-node", index: node.index })}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const payload = readDragPayload(event);
+                if (payload?.type === "ds-node") setParent(payload.index, node.index);
+              }}
+              style={{
+                left: node.x - layout.nodeSize / 2,
+                top: node.y,
+                width: layout.nodeSize,
+                height: layout.nodeSize,
+              }}
+              title={parents[node.index] === node.index ? `Node ${node.index} is a root` : `Parent: ${parents[node.index]}`}
+            >
+              {node.index}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ArrayView indexes={indexes} values={parents} />
     </div>
   );
 }

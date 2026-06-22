@@ -439,6 +439,67 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+.ds-builder {
+  display: grid;
+  gap: 12px;
+}
+
+.ds-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.ds-toolbar span {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 760;
+}
+
+.ds-canvas {
+  overflow: auto;
+  min-height: 380px;
+  border: var(--glass-border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(180deg, oklch(0.14 0.018 250 / 0.96), oklch(0.115 0.016 250 / 0.96));
+}
+
+.ds-stage {
+  position: relative;
+  min-width: max-content;
+}
+
+.ds-node {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid oklch(0.63 0.1 230 / 0.58);
+  border-radius: 50%;
+  background: oklch(0.34 0.085 238);
+  color: var(--text-strong);
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 900;
+  box-shadow: 0 8px 18px oklch(0.05 0.014 250 / 0.34);
+}
+
+.ds-node.root {
+  border-color: oklch(0.7 0.12 230 / 0.72);
+  background: linear-gradient(180deg, oklch(0.38 0.095 238), oklch(0.28 0.07 242));
+}
+
+.ds-node.selected {
+  border-color: oklch(0.76 0.14 80);
+  box-shadow: 0 0 0 3px oklch(0.76 0.14 80 / 0.22), 0 0 30px oklch(0.76 0.14 80 / 0.18);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
