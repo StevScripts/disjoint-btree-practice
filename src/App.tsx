@@ -2276,16 +2276,15 @@ function RBStepBuilder({
             {looseSubtrees.length > 0 ? (
               <div className="loose-subtree-list">
                 {looseSubtrees.map((subtree) => (
-                  <button
-                    className={`loose-subtree-chip ${subtree.color}`}
-                    draggable
+                  <div
+                    className="loose-subtree-preview"
                     key={subtree.id}
+                    draggable
                     onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.id })}
                     title="Drag this subtree onto a left or right slot."
                   >
-                    {subtree.key}
-                    {(subtree.left || subtree.right) && <span>subtree</span>}
-                  </button>
+                    <RBTreeView root={subtree} label={`Loose root ${subtree.key}`} />
+                  </div>
                 ))}
               </div>
             ) : (
