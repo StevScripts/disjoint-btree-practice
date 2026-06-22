@@ -8,8 +8,8 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import type { DragEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { DragEvent, PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Topic = "api" | "backtracking" | "sets" | "insert" | "delete" | "rb-insert" | "rb-delete" | "skip" | "analysis";
 type ProblemKind =
@@ -149,6 +149,11 @@ type Stats = {
   correct: number;
   streak: number;
   bestStreak: number;
+};
+
+type DsStep = {
+  parents: number[];
+  positions: DsPosition[];
 };
 
 const TOPICS: { id: Topic; label: string; icon: typeof Network }[] = [
@@ -1576,6 +1581,14 @@ function removeChildFromNode(root: TreeNode, nodeId: string): TreeNode {
   return remove(root) ?? root;
 }
 
+function moveSubtreeToNode(root: TreeNode, nodeId: string, targetId: string, index: number): TreeNode {
+  if (nodeId === root.id || nodeId === targetId) return root;
+  const subtree = findTreeNode(root, nodeId);
+  if (!subtree || findTreeNode(subtree, targetId)) return root;
+  const withoutSubtree = removeChildFromNode(root, nodeId);
+  return insertChildToNode(withoutSubtree, targetId, cloneTree(subtree), index);
+}
+
 function clearChildrenFromNode(root: TreeNode, nodeId: string): TreeNode {
   return updateTreeNode(root, nodeId, (node) => ({
     ...node,
@@ -1679,9 +1692,11 @@ function App() {
     return Number.isFinite(saved) && saved > 0 ? saved : Date.now();
   });
   const [arrayAnswer, setArrayAnswer] = useState<number[]>([]);
+  const [dsSteps, setDsSteps] = useState<DsStep[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [treeSteps, setTreeSteps] = useState<TreeNode[]>([]);
   const [rbSteps, setRbSteps] = useState<RBNode[]>([]);
+  const [currentDsStep, setCurrentDsStep] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
   const [currentRBStep, setCurrentRBStep] = useState(0);
   const [result, setResult] = useState<"idle" | "correct" | "wrong">("idle");
@@ -1709,31 +1724,40 @@ function App() {
     setResult("idle");
     setShowAnswer(false);
     if (problem.answerType === "array") {
-      setArrayAnswer(range(problem.expectedArray?.length ?? 0));
+      const initialParents = range(problem.expectedArray?.length ?? 0);
+      setArrayAnswer(initialParents);
+      setDsSteps([{ parents: initialParents, positions: initialDsPositions(initialParents.length) }]);
       setQuizAnswers({});
       setTreeSteps([]);
       setRbSteps([]);
+      setCurrentDsStep(0);
       setCurrentStep(0);
       setCurrentRBStep(0);
     } else if (problem.answerType === "tree") {
       setArrayAnswer([]);
+      setDsSteps([]);
       setQuizAnswers({});
       setTreeSteps(problem.initialTree ? [cloneTree(problem.initialTree)] : []);
       setRbSteps([]);
+      setCurrentDsStep(0);
       setCurrentStep(0);
       setCurrentRBStep(0);
     } else if (problem.answerType === "rb") {
       setArrayAnswer([]);
+      setDsSteps([]);
       setQuizAnswers({});
       setTreeSteps([]);
       setRbSteps(problem.initialRBTree ? [cloneRBTree(problem.initialRBTree)!] : []);
+      setCurrentDsStep(0);
       setCurrentStep(0);
       setCurrentRBStep(0);
     } else {
       setArrayAnswer([]);
+      setDsSteps([]);
       setQuizAnswers(Object.fromEntries((problem.quizParts ?? []).map((part) => [part.id, ""])));
       setTreeSteps([]);
       setRbSteps([]);
+      setCurrentDsStep(0);
       setCurrentStep(0);
       setCurrentRBStep(0);
     }
@@ -1741,8 +1765,10 @@ function App() {
 
   const checkAnswer = () => {
     const correct =
-      problem.answerType === "array"
-        ? JSON.stringify(arrayAnswer) === JSON.stringify(problem.expectedArray)
+      problem.kind === "ds-array"
+        ? JSON.stringify(dsSteps[dsSteps.length - 1]?.parents ?? []) === JSON.stringify(problem.expectedArray)
+        : problem.answerType === "array"
+          ? JSON.stringify(arrayAnswer) === JSON.stringify(problem.expectedArray)
         : problem.answerType === "tree"
           ? normalizeTree(treeSteps[treeSteps.length - 1] ?? null) === normalizeTree(problem.expectedTree ?? null)
           : problem.answerType === "rb"
@@ -1887,8 +1913,10 @@ function App() {
           {problem.answerType === "array" && problem.kind === "ds-array" ? (
             <DisjointSetBuilder
               indexes={problem.indexes ?? []}
-              parents={arrayAnswer}
-              onChange={setArrayAnswer}
+              steps={dsSteps}
+              currentStep={currentDsStep}
+              onCurrentStepChange={setCurrentDsStep}
+              onStepsChange={setDsSteps}
             />
           ) : problem.answerType === "array" ? (
             <ArrayAnswer
@@ -2126,77 +2154,6 @@ function ArrayView({ indexes, values }: { indexes: number[]; values: number[] })
   );
 }
 
-type DsLayoutNode = {
-  index: number;
-  x: number;
-  y: number;
-};
-
-function buildDsForestLayout(parents: number[]) {
-  const nodeSize = 46;
-  const siblingGap = 36;
-  const treeGap = 56;
-  const levelGap = 86;
-  const padding = 30;
-  const children = parents.map((): number[] => []);
-  parents.forEach((parent, index) => {
-    if (parent !== index && parent >= 0 && parent < parents.length) {
-      children[parent].push(index);
-    }
-  });
-  children.forEach((items) => items.sort((a, b) => a - b));
-
-  const roots = parents.map((parent, index) => parent === index ? index : -1).filter((index) => index >= 0);
-  const measure = (index: number): number => {
-    const childWidths = children[index].map(measure);
-    if (childWidths.length === 0) return nodeSize;
-    return Math.max(nodeSize, childWidths.reduce((total, width) => total + width, 0) + siblingGap * (childWidths.length - 1));
-  };
-
-  const nodes: DsLayoutNode[] = [];
-  const lines: LayoutLine[] = [];
-  let maxY = padding + nodeSize;
-
-  const place = (index: number, left: number, depth: number): number => {
-    const width = measure(index);
-    const centerX = left + width / 2;
-    const y = padding + depth * levelGap;
-    nodes.push({ index, x: centerX, y });
-    maxY = Math.max(maxY, y + nodeSize);
-
-    const childWidths = children[index].map(measure);
-    const childrenWidth = childWidths.length === 0 ? 0 : childWidths.reduce((total, value) => total + value, 0) + siblingGap * (childWidths.length - 1);
-    let childLeft = left + (width - childrenWidth) / 2;
-    children[index].forEach((child, childIndex) => {
-      const childCenterX = place(child, childLeft, depth + 1);
-      const childY = padding + (depth + 1) * levelGap;
-      lines.push({
-        x1: centerX,
-        y1: y + nodeSize,
-        x2: childCenterX,
-        y2: childY,
-      });
-      childLeft += childWidths[childIndex] + siblingGap;
-    });
-    return centerX;
-  };
-
-  let left = padding;
-  roots.forEach((root) => {
-    const width = measure(root);
-    place(root, left, 0);
-    left += width + treeGap;
-  });
-
-  return {
-    nodes: nodes.map((node) => ({ ...node, x: node.x })),
-    lines,
-    width: Math.max(620, left - treeGap + padding),
-    height: maxY + padding,
-    nodeSize,
-  };
-}
-
 function createsDsCycle(parents: number[], child: number, parent: number) {
   let current = parent;
   const seen = new Set<number>();
@@ -2209,28 +2166,92 @@ function createsDsCycle(parents: number[], child: number, parent: number) {
   return true;
 }
 
+type DsPosition = {
+  x: number;
+  y: number;
+};
+
+function initialDsPositions(count: number): DsPosition[] {
+  const columns = Math.ceil(Math.sqrt(count));
+  const gapX = 86;
+  const gapY = 82;
+  return Array.from({ length: count }, (_, index) => ({
+    x: 58 + (index % columns) * gapX,
+    y: 58 + Math.floor(index / columns) * gapY,
+  }));
+}
+
 function DisjointSetBuilder({
   indexes,
-  parents,
-  onChange,
+  steps,
+  currentStep,
+  onCurrentStepChange,
+  onStepsChange,
 }: {
   indexes: number[];
-  parents: number[];
-  onChange: (parents: number[]) => void;
+  steps: DsStep[];
+  currentStep: number;
+  onCurrentStepChange: (index: number) => void;
+  onStepsChange: (steps: DsStep[]) => void;
 }) {
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
-  const layout = buildDsForestLayout(parents.length === indexes.length ? parents : range(indexes.length));
+  const [mode, setMode] = useState<"move" | "connect">("move");
+  const [dragging, setDragging] = useState<{ index: number; offsetX: number; offsetY: number } | null>(null);
+  const fallbackStep = { parents: range(indexes.length), positions: initialDsPositions(indexes.length) };
+  const step = steps[currentStep] ?? fallbackStep;
+  const effectiveParents = step.parents.length === indexes.length ? step.parents : range(indexes.length);
+  const positions = step.positions.length === indexes.length ? step.positions : initialDsPositions(indexes.length);
+  const nodeSize = 46;
+  const canvasWidth = Math.max(720, positions.reduce((max, position) => Math.max(max, position.x + 90), 0));
+  const canvasHeight = Math.max(420, positions.reduce((max, position) => Math.max(max, position.y + 90), 0));
+
+  useEffect(() => {
+    setSelected(null);
+    setDragging(null);
+  }, [indexes.length]);
+
+  const updateCurrentStep = (nextStep: DsStep) => {
+    onStepsChange(steps.map((item, index) => (index === currentStep ? nextStep : item)));
+  };
+
+  const updateParents = (parents: number[]) => {
+    updateCurrentStep({ parents, positions });
+  };
+
+  const updatePositions = (nextPositions: DsPosition[]) => {
+    updateCurrentStep({ parents: effectiveParents, positions: nextPositions });
+  };
+
+  const addStep = () => {
+    const next = [
+      ...steps.slice(0, currentStep + 1),
+      { parents: [...effectiveParents], positions: positions.map((position) => ({ ...position })) },
+    ];
+    onStepsChange(next);
+    onCurrentStepChange(next.length - 1);
+    setSelected(null);
+  };
+
+  const removeStep = () => {
+    if (steps.length <= 1) return;
+    const next = steps.filter((_, index) => index !== currentStep);
+    onStepsChange(next);
+    onCurrentStepChange(Math.max(0, currentStep - 1));
+    setSelected(null);
+  };
 
   const setParent = (child: number, parent: number) => {
-    if (child < 0 || parent < 0 || child >= parents.length || parent >= parents.length) return;
-    if (child !== parent && createsDsCycle(parents, child, parent)) return;
-    const next = [...parents];
+    if (child < 0 || parent < 0 || child >= effectiveParents.length || parent >= effectiveParents.length) return;
+    if (child !== parent && createsDsCycle(effectiveParents, child, parent)) return;
+    const next = [...effectiveParents];
     next[child] = parent;
-    onChange(next);
+    updateParents(next);
     setSelected(null);
   };
 
   const handleNodeClick = (index: number) => {
+    if (mode !== "connect") return;
     if (selected === null) {
       setSelected(index);
       return;
@@ -2238,57 +2259,157 @@ function DisjointSetBuilder({
     setParent(selected, index);
   };
 
+  const canvasPoint = (event: PointerEvent<HTMLButtonElement>) => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    if (!bounds) return null;
+    return {
+      x: event.clientX - bounds.left + (canvasRef.current?.scrollLeft ?? 0),
+      y: event.clientY - bounds.top + (canvasRef.current?.scrollTop ?? 0),
+    };
+  };
+
+  const startMove = (event: PointerEvent<HTMLButtonElement>, index: number) => {
+    if (mode !== "move") return;
+    const point = canvasPoint(event);
+    if (!point) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging({
+      index,
+      offsetX: point.x - positions[index].x,
+      offsetY: point.y - positions[index].y,
+    });
+  };
+
+  const moveNode = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!dragging) return;
+    const point = canvasPoint(event);
+    if (!point) return;
+    const next = [...positions];
+    next[dragging.index] = {
+      x: Math.max(24, Math.min(canvasWidth - nodeSize - 24, point.x - dragging.offsetX)),
+      y: Math.max(24, Math.min(canvasHeight - nodeSize - 24, point.y - dragging.offsetY)),
+    };
+    updatePositions(next);
+  };
+
+  const finishMove = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!dragging) return;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    setDragging(null);
+  };
+
   return (
     <div className="ds-builder">
-      <div className="ds-toolbar">
-        <span>{selected === null ? "Choose a child node" : `Node ${selected}: choose its parent`}</span>
-        <div className="panel-tools">
-          <button className="secondary compact" onClick={() => setSelected(null)} disabled={selected === null}>
-            Cancel
+      <div className="step-toolbar">
+        <div className="step-tabs" aria-label="Disjoint set answer steps">
+          {steps.map((_, index) => (
+            <button
+              className={index === currentStep ? "step-tab active" : "step-tab"}
+              key={index}
+              onClick={() => onCurrentStepChange(index)}
+            >
+              Step {index + 1}
+            </button>
+          ))}
+        </div>
+        <div className="step-actions">
+          <button className="secondary compact" onClick={addStep}>
+            <CirclePlus size={16} />
+            Add step
           </button>
-          <button className="secondary compact" onClick={() => onChange(range(indexes.length))}>
-            Reset
+          <button className="secondary compact" onClick={removeStep} disabled={steps.length <= 1}>
+            Remove step
           </button>
         </div>
       </div>
-      <div className="ds-canvas" aria-label="Disjoint set forest builder">
-        <div className="ds-stage" style={{ width: layout.width, height: layout.height }}>
-          <svg className="tree-lines" width={layout.width} height={layout.height} aria-hidden="true">
-            {layout.lines.map((line, index) => (
-              <line key={`${line.x1}-${line.y1}-${index}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
-            ))}
+      <div className="ds-toolbar">
+        <div className="ds-tool-group" aria-label="Disjoint set tools">
+          <button className={mode === "move" ? "scenario active" : "scenario"} onClick={() => {
+            setMode("move");
+            setSelected(null);
+          }}>
+            Move
+          </button>
+          <button className={mode === "connect" ? "scenario active" : "scenario"} onClick={() => setMode("connect")}>
+            Connect
+          </button>
+        </div>
+        <span>{mode === "move" ? "Drag nodes anywhere" : selected === null ? "Select child, then parent" : `Node ${selected}: choose parent`}</span>
+        <div className="panel-tools">
+          <button className="secondary compact" onClick={() => selected !== null && setParent(selected, selected)} disabled={selected === null || mode !== "connect"}>
+            Make root
+          </button>
+          <button className="secondary compact" onClick={() => setSelected(null)} disabled={selected === null}>
+            Cancel
+          </button>
+          <button className="secondary compact" onClick={() => updatePositions(initialDsPositions(indexes.length))}>
+            Arrange
+          </button>
+          <button className="secondary compact" onClick={() => {
+            updateParents(range(indexes.length));
+            setSelected(null);
+          }}>
+            Clear edges
+          </button>
+        </div>
+      </div>
+      <div className="ds-canvas" ref={canvasRef} aria-label="Disjoint set freeform builder">
+        <div className="ds-stage" style={{ width: canvasWidth, height: canvasHeight }}>
+          <svg className="tree-lines" width={canvasWidth} height={canvasHeight} aria-hidden="true">
+            {effectiveParents.map((parent, child) => parent !== child && positions[parent] && positions[child] ? (
+              <line
+                key={`${child}-${parent}`}
+                x1={positions[parent].x + nodeSize / 2}
+                y1={positions[parent].y + nodeSize / 2}
+                x2={positions[child].x + nodeSize / 2}
+                y2={positions[child].y + nodeSize / 2}
+              />
+            ) : null)}
+            {selected !== null && positions[selected] && (
+              <circle
+                cx={positions[selected].x + nodeSize / 2}
+                cy={positions[selected].y + nodeSize / 2}
+                fill="none"
+                r={nodeSize / 2 + 10}
+              />
+            )}
           </svg>
-          {layout.nodes.map((node) => (
+          {indexes.map((index) => (
             <button
               className={[
                 "ds-node",
-                selected === node.index ? "selected" : "",
-                parents[node.index] === node.index ? "root" : "",
+                selected === index ? "selected" : "",
+                effectiveParents[index] === index ? "root" : "",
+                mode === "move" ? "move-mode" : "connect-mode",
               ].filter(Boolean).join(" ")}
-              draggable
-              key={node.index}
-              onClick={() => handleNodeClick(node.index)}
-              onDragStart={(event) => writeDragPayload(event, { type: "ds-node", index: node.index })}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                const payload = readDragPayload(event);
-                if (payload?.type === "ds-node") setParent(payload.index, node.index);
-              }}
+              key={index}
+              onClick={() => handleNodeClick(index)}
+              onPointerDown={(event) => startMove(event, index)}
+              onPointerMove={moveNode}
+              onPointerUp={finishMove}
+              onPointerCancel={finishMove}
               style={{
-                left: node.x - layout.nodeSize / 2,
-                top: node.y,
-                width: layout.nodeSize,
-                height: layout.nodeSize,
+                left: positions[index]?.x ?? 0,
+                top: positions[index]?.y ?? 0,
+                width: nodeSize,
+                height: nodeSize,
               }}
-              title={parents[node.index] === node.index ? `Node ${node.index} is a root` : `Parent: ${parents[node.index]}`}
+              title={effectiveParents[index] === index ? `Node ${index} is a root` : `Parent: ${effectiveParents[index]}`}
             >
-              {node.index}
+              {index}
             </button>
           ))}
         </div>
       </div>
-      <ArrayView indexes={indexes} values={parents} />
+      <div className="graded-array">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Graded answer</p>
+            <h3>Parent array</h3>
+          </div>
+        </div>
+        <ArrayAnswer indexes={indexes} values={effectiveParents} onChange={updateParents} />
+      </div>
     </div>
   );
 }
@@ -2765,7 +2886,7 @@ function TreeStepBuilder({
         </aside>
 
         <div>
-          <p className="hint">Drop a key on a node to add it there, or below a node to create a child in that position. Use Parent above root when a split creates a new root.</p>
+          <p className="hint">Drop a key on a node to add it there, or below a node to create a child. Drag a whole node below another node to move that entire subtree.</p>
           <EditableTree root={currentTree} onChange={updateCurrentTree} />
         </div>
       </div>
@@ -2785,7 +2906,7 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
 
   const dropNearNode = (event: DragEvent<HTMLDivElement>) => {
     const payload = readDragPayload(event);
-    if (!payload || payload.type === "tree-node" || payload.type === "rb-node" || payload.type === "rb-loose-node" || payload.type === "rb-palette-node") return;
+    if (!payload || payload.type === "rb-node" || payload.type === "rb-loose-node" || payload.type === "rb-palette-node") return;
 
     const stage = event.currentTarget.querySelector(".tree-stage");
     const bounds = stage?.getBoundingClientRect();
@@ -2848,6 +2969,10 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
           ? addEmptyChildToNode(root, closest.layoutNode.node.id, childIndex)
           : addChildToNode(root, closest.layoutNode.node.id),
       );
+    }
+
+    if (payload.type === "tree-node") {
+      onChange(moveSubtreeToNode(root, payload.nodeId, closest.layoutNode.node.id, childIndex));
     }
   };
 
