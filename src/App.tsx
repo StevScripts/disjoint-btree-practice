@@ -744,6 +744,7 @@ function App() {
   };
 
   const accuracy = stats.attempted === 0 ? 0 : Math.round((stats.correct / stats.attempted) * 100);
+  const explanation = buildExplanation(problem);
 
   return (
     <main className="app-shell">
@@ -832,8 +833,8 @@ function App() {
           )}
           <div className="actions">
             <button className="primary" onClick={checkAnswer}>Check</button>
-            <button className="secondary" onClick={() => setShowAnswer((value) => !value)}>
-              {showAnswer ? "Hide answer" : "Show answer"}
+            <button className="secondary" onClick={() => setShowAnswer(true)}>
+              Show answer
             </button>
           </div>
           {result !== "idle" && (
@@ -845,28 +846,95 @@ function App() {
         </section>
       </section>
 
-      <aside className="review">
-        <h3>Trace</h3>
-        <ol>
-          {problem.trace.map((event, index) => (
-            <li key={`${event.title}-${index}`}>
-              <strong>{event.title}</strong>
-              <span>{event.detail}</span>
-            </li>
-          ))}
-        </ol>
-        {showAnswer && (
-          <section className="expected">
-            <h3>Expected</h3>
-            {problem.answerType === "array" ? (
-              <ArrayView indexes={problem.indexes ?? []} values={problem.expectedArray ?? []} />
-            ) : (
-              problem.expectedTree && <TreeView root={problem.expectedTree} label="Final tree" />
-            )}
-          </section>
-        )}
-      </aside>
+      {showAnswer && (
+        <AnswerModal
+          explanation={explanation}
+          onClose={() => setShowAnswer(false)}
+          problem={problem}
+        />
+      )}
     </main>
+  );
+}
+
+function buildExplanation(problem: Problem) {
+  if (problem.answerType === "array") {
+    return {
+      heading: "How the parent array is built",
+      summary: "Work through the unions in order. Each union compares the current roots, attaches the shorter tree under the taller tree, and uses the lower root when heights tie.",
+      steps: problem.trace.map((event, index) => ({
+        title: `Step ${index + 1}: ${event.title}`,
+        detail: event.detail,
+      })),
+    };
+  }
+
+  const summary =
+    problem.kind === "tree-insert"
+      ? "First find the leaf where the new key belongs. The important part is what happens after placement: if a node has four keys, split it and send the third value upward."
+      : "First remove or replace the target key. The important part is repairing any child with too few keys: borrow from a sibling when possible, otherwise merge through the parent.";
+
+  return {
+    heading: "What changes at each tree step",
+    summary,
+    steps: problem.trace.map((event, index) => ({
+      title: `Step ${index + 1}: ${event.title}`,
+      detail: event.detail,
+    })),
+  };
+}
+
+function AnswerModal({
+  problem,
+  explanation,
+  onClose,
+}: {
+  problem: Problem;
+  explanation: { heading: string; summary: string; steps: { title: string; detail: string }[] };
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        aria-labelledby="answer-title"
+        aria-modal="true"
+        className="answer-modal"
+        role="dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="modal-header">
+          <div>
+            <p className="eyebrow">{problem.id} · {problem.scenario}</p>
+            <h2 id="answer-title">Answer and explanation</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} title="Close answer">
+            <XCircle size={18} />
+          </button>
+        </header>
+
+        <section className="modal-section">
+          <h3>Expected answer</h3>
+          {problem.answerType === "array" ? (
+            <ArrayView indexes={problem.indexes ?? []} values={problem.expectedArray ?? []} />
+          ) : (
+            problem.expectedTree && <TreeView root={problem.expectedTree} label="Final tree" />
+          )}
+        </section>
+
+        <section className="modal-section">
+          <h3>{explanation.heading}</h3>
+          <p className="modal-summary">{explanation.summary}</p>
+          <ol className="explanation-list">
+            {explanation.steps.map((step) => (
+              <li key={step.title}>
+                <strong>{step.title}</strong>
+                <span>{step.detail}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </section>
+    </div>
   );
 }
 

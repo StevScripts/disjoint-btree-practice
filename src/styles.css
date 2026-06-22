@@ -29,7 +29,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 340px;
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -181,8 +181,7 @@ h3 {
 }
 
 .problem-panel,
-.answer-panel,
-.review {
+.answer-panel {
   border: 1px solid oklch(0.84 0.012 235);
   border-radius: 8px;
   background: oklch(0.988 0.003 235);
@@ -561,59 +560,81 @@ button:disabled {
   font-weight: 800;
 }
 
-.review {
-  max-height: 100vh;
-  overflow: auto;
-  padding: 24px 18px;
-  border-top: 0;
-  border-right: 0;
-  border-bottom: 0;
-  border-radius: 0;
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: oklch(0.18 0.012 245 / 0.58);
 }
 
-.review ol {
+.answer-modal {
+  display: grid;
+  gap: 18px;
+  width: min(1040px, 100%);
+  max-height: min(860px, calc(100vh - 56px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid oklch(0.78 0.012 235);
+  border-radius: 8px;
+  background: oklch(0.988 0.003 235);
+  box-shadow: 0 18px 60px oklch(0.16 0.02 245 / 0.32);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.modal-section {
   display: grid;
   gap: 12px;
+}
+
+.modal-summary {
+  max-width: 76ch;
+  margin: 0;
+  color: oklch(0.36 0.018 245);
+  line-height: 1.5;
+}
+
+.explanation-list {
+  display: grid;
+  gap: 10px;
   margin: 0;
   padding-left: 22px;
 }
 
-.review li {
-  padding-left: 4px;
+.explanation-list li {
+  padding: 10px 12px;
+  border: 1px solid oklch(0.84 0.012 235);
+  border-radius: 8px;
+  background: oklch(0.965 0.006 235);
 }
 
-.review strong,
-.review span {
+.explanation-list strong,
+.explanation-list span {
   display: block;
 }
 
-.review strong {
-  margin-bottom: 3px;
-  color: oklch(0.25 0.018 245);
+.explanation-list strong {
+  margin-bottom: 4px;
+  color: oklch(0.24 0.018 245);
 }
 
-.review span {
-  color: oklch(0.43 0.015 245);
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.expected {
-  margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid oklch(0.84 0.012 235);
+.explanation-list span {
+  color: oklch(0.4 0.015 245);
+  line-height: 1.45;
 }
 
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .review {
-    grid-column: 1 / -1;
-    max-height: none;
-    border-top: 1px solid oklch(0.84 0.012 235);
-    border-left: 0;
   }
 }
 
