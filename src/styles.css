@@ -878,6 +878,122 @@ button.rb-node {
   line-height: 1.45;
 }
 
+.quiz-answer,
+.expected-quiz {
+  display: grid;
+  gap: 10px;
+}
+
+.quiz-part,
+.expected-quiz div {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid oklch(0.84 0.012 230);
+  border-radius: 8px;
+  background: oklch(0.975 0.006 230);
+}
+
+.quiz-part span,
+.expected-quiz strong {
+  color: oklch(0.25 0.02 245);
+  font-weight: 820;
+}
+
+.quiz-part small {
+  color: oklch(0.42 0.018 245);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.quiz-part input,
+.quiz-part select {
+  min-height: 38px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid oklch(0.78 0.012 230);
+  border-radius: 8px;
+  background: oklch(0.995 0.002 230);
+  color: oklch(0.22 0.018 245);
+}
+
+.expected-quiz span {
+  color: oklch(0.36 0.018 245);
+  line-height: 1.45;
+}
+
+.skip-visual {
+  display: grid;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 14px;
+  border: 1px solid oklch(0.82 0.015 230);
+  border-radius: 8px;
+  background: oklch(0.965 0.006 230);
+}
+
+.skip-level {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: max-content;
+}
+
+.skip-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 28px;
+  border-radius: 6px;
+  background: oklch(0.88 0.035 225);
+  color: oklch(0.25 0.04 245);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.skip-node {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid oklch(0.5 0.08 225);
+  border-radius: 8px;
+  background: oklch(0.82 0.08 235);
+  color: oklch(0.17 0.02 245);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 850;
+}
+
+.skip-node.sentinel {
+  border-color: oklch(0.72 0.014 230);
+  background: oklch(0.99 0.003 230);
+  color: oklch(0.48 0.018 245);
+}
+
+.letter-grid {
+  display: grid;
+  width: fit-content;
+  overflow: hidden;
+  border: 1px solid oklch(0.76 0.012 230);
+  border-radius: 8px;
+  background: oklch(0.99 0.003 230);
+}
+
+.letter-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 38px;
+  border-right: 1px solid oklch(0.84 0.012 230);
+  border-bottom: 1px solid oklch(0.84 0.012 230);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 850;
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 232px minmax(0, 1fr);

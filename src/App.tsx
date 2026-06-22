@@ -1,10 +1,14 @@
 import {
+  Brain,
   CheckCircle2,
   CirclePlus,
+  Code2,
   GitBranch,
+  ListTree,
   Network,
   RotateCcw,
   Shuffle,
+  Sigma,
   SplitSquareHorizontal,
   Trash2,
   XCircle,
@@ -12,11 +16,30 @@ import {
 import type { DragEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-type Topic = "sets" | "insert" | "delete" | "rb-insert" | "rb-delete" | "mixed";
-type ProblemKind = "ds-array" | "tree-insert" | "tree-delete" | "rb-insert" | "rb-delete";
+type Topic = "api" | "backtracking" | "sets" | "insert" | "delete" | "rb-insert" | "rb-delete" | "skip" | "analysis" | "exam" | "mixed";
+type ProblemKind =
+  | "api-runtime"
+  | "api-code"
+  | "backtracking-code"
+  | "backtracking-concept"
+  | "ds-array"
+  | "ds-code"
+  | "tree-insert"
+  | "tree-delete"
+  | "rb-insert"
+  | "rb-delete"
+  | "skip-concept"
+  | "skip-structure"
+  | "analysis-math";
 type Scenario =
   | "Basic"
   | "Worksheet"
+  | "Runtime"
+  | "Code"
+  | "Concept"
+  | "Trace"
+  | "Math"
+  | "Mock"
   | "Overflow"
   | "Cascade"
   | "Borrow"
@@ -92,6 +115,14 @@ type RBTreeLayout = {
   height: number;
 };
 
+type QuizPart = {
+  id: string;
+  label: string;
+  prompt: string;
+  answer: string;
+  options?: string[];
+};
+
 type Problem = {
   id: string;
   kind: ProblemKind;
@@ -99,7 +130,8 @@ type Problem = {
   prompt: string;
   scenario: Scenario;
   trace: TraceEvent[];
-  answerType: "array" | "tree" | "rb";
+  answerType: "array" | "tree" | "rb" | "quiz";
+  points?: number;
   expectedArray?: number[];
   initialArray?: number[];
   indexes?: number[];
@@ -107,6 +139,12 @@ type Problem = {
   expectedTree?: TreeNode;
   initialRBTree?: RBNode;
   expectedRBTree?: RBNode;
+  quizParts?: QuizPart[];
+  visual?: {
+    type: "skip-list" | "grid" | "runtime-table";
+    levels?: number[][];
+    grid?: string[][];
+  };
 };
 
 type Stats = {
@@ -117,26 +155,42 @@ type Stats = {
 };
 
 const TOPICS: { id: Topic; label: string; icon: typeof Network }[] = [
+  { id: "api", label: "Java API", icon: Code2 },
+  { id: "backtracking", label: "Backtracking", icon: Brain },
   { id: "sets", label: "Disjoint Sets", icon: Network },
   { id: "insert", label: "2-4 Insert", icon: SplitSquareHorizontal },
   { id: "delete", label: "2-4 Delete", icon: Trash2 },
   { id: "rb-insert", label: "RB Insert", icon: GitBranch },
   { id: "rb-delete", label: "RB Delete", icon: GitBranch },
+  { id: "skip", label: "Skip Lists", icon: ListTree },
+  { id: "analysis", label: "Analysis", icon: Sigma },
+  { id: "exam", label: "Exam Mode", icon: Shuffle },
   { id: "mixed", label: "Mixed Review", icon: Shuffle },
 ];
 
 const SCENARIOS: Record<Topic, Scenario[]> = {
+  api: ["Runtime", "Code"],
+  backtracking: ["Code", "Concept"],
   sets: ["Basic", "Worksheet", "Cascade"],
   insert: ["Basic", "Overflow", "Cascade"],
   delete: ["Basic", "Borrow", "Merge", "Root"],
   "rb-insert": ["Basic", "Recolor", "SingleRotate", "DoubleRotate", "Root"],
   "rb-delete": ["Basic", "BlackLeaf", "SiblingRed", "Borrow", "DoubleRotate", "Cascade"],
+  skip: ["Concept", "Trace", "Math"],
+  analysis: ["Runtime", "Math", "Concept"],
+  exam: ["Mock"],
   mixed: ["Worksheet", "Overflow", "Merge", "Cascade"],
 };
 
 const SCENARIO_LABELS: Record<Scenario, string> = {
   Basic: "Basic",
   Worksheet: "Worksheet",
+  Runtime: "Runtime",
+  Code: "Code",
+  Concept: "Concept",
+  Trace: "Trace",
+  Math: "Math",
+  Mock: "Mock Exam",
   Overflow: "Overflow",
   Cascade: "Cascade",
   Borrow: "Borrow",
@@ -211,6 +265,17 @@ function normalizeRBTree(node: RBNode | null): string {
     left: normalizeRBTree(node.left),
     right: normalizeRBTree(node.right),
   });
+}
+
+function normalizeText(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function quizMatches(answer: string, expected: string) {
+  const actual = normalizeText(answer);
+  const wanted = normalizeText(expected);
+  if (actual === wanted) return true;
+  return wanted.split("|").some((option) => actual === normalizeText(option));
 }
 
 const TREE_NODE_HEIGHT = 48;
@@ -856,7 +921,11 @@ class RedBlackTree {
 function generateProblem(topic: Topic, seed: number, scenario: Scenario): Problem {
   const rng = makeRng(seed);
   const kind =
-    topic === "sets"
+    topic === "api"
+      ? scenario === "Code" ? "api-code" : "api-runtime"
+      : topic === "backtracking"
+        ? scenario === "Concept" ? "backtracking-concept" : "backtracking-code"
+        : topic === "sets"
       ? "ds-array"
       : topic === "insert"
         ? "tree-insert"
@@ -866,19 +935,315 @@ function generateProblem(topic: Topic, seed: number, scenario: Scenario): Proble
             ? "rb-insert"
             : topic === "rb-delete"
               ? "rb-delete"
-              : pick(rng, ["ds-array", "tree-insert", "tree-delete"] as ProblemKind[]);
+              : topic === "skip"
+                ? scenario === "Trace" ? "skip-structure" : "skip-concept"
+                : topic === "analysis"
+                  ? "analysis-math"
+                  : topic === "exam"
+                    ? pick(rng, ["api-runtime", "api-code", "backtracking-code", "ds-code", "tree-delete", "rb-delete", "skip-structure", "analysis-math"] as ProblemKind[])
+                    : pick(rng, ["ds-array", "tree-insert", "tree-delete", "rb-insert", "skip-concept", "analysis-math"] as ProblemKind[]);
 
+  if (kind === "api-runtime") return generateApiRuntime(rng, seed, scenario);
+  if (kind === "api-code") return generateRollingMedian(rng, seed, scenario);
+  if (kind === "backtracking-code") return generateBacktrackingCode(rng, seed, scenario);
+  if (kind === "backtracking-concept") return generateBacktrackingConcept(rng, seed, scenario);
   if (kind === "ds-array") return generateDsArray(rng, seed, scenario);
+  if (kind === "ds-code") return generateDsCode(rng, seed, scenario);
   if (kind === "tree-delete") return generateTreeDelete(rng, seed, scenario);
   if (kind === "rb-insert") return generateRBInsert(rng, seed, scenario);
   if (kind === "rb-delete") return generateRBDelete(rng, seed, scenario);
+  if (kind === "skip-concept") return generateSkipConcept(rng, seed, scenario);
+  if (kind === "skip-structure") return generateSkipStructure(rng, seed, scenario);
+  if (kind === "analysis-math") return generateAnalysis(rng, seed, scenario);
   return generateTreeInsert(rng, seed, scenario);
+}
+
+function quizProblem(params: Omit<Problem, "answerType" | "trace"> & { trace?: TraceEvent[] }): Problem {
+  return {
+    ...params,
+    trace: params.trace ?? params.quizParts?.map((part) => ({ title: part.label, detail: `Expected: ${part.answer.replaceAll("|", " or ")}` })) ?? [],
+    answerType: "quiz",
+  };
+}
+
+function generateApiRuntime(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const operations = shuffle(rng, [
+    ["Collections.sort(List<T> list)", "O(n log n)"],
+    ["ArrayList.add(E e)", "O(1)"],
+    ["ArrayList.add(int index, E element)", "O(n)"],
+    ["TreeSet.lower(E e)", "O(log n)|O(lg n)"],
+    ["HashMap.get(Object key)", "O(1)"],
+    ["PriorityQueue.poll()", "O(log n)|O(lg n)"],
+    ["PriorityQueue.remove(Object o)", "O(n)"],
+    ["ArrayList.contains(Object o)", "O(n)"],
+    ["HashSet.add(Object o)", "O(1)"],
+    ["ArrayList.size()", "O(1)"],
+  ]).slice(0, scenario === "Mock" ? 6 : 5);
+
+  return quizProblem({
+    id: `API-${seed}`,
+    kind: "api-runtime",
+    title: "Java API Runtime Table",
+    prompt: "For each Java API operation, write the expected run-time assuming the structure currently has n items. Use Big-O notation like the exam.",
+    scenario,
+    points: operations.length,
+    visual: { type: "runtime-table" },
+    quizParts: operations.map(([operation, answer], index) => ({
+      id: `api-${index}`,
+      label: operation,
+      prompt: operation,
+      answer,
+      options: ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+    })),
+  });
+}
+
+function generateRollingMedian(_rng: () => number, seed: number, scenario: Scenario): Problem {
+  return quizProblem({
+    id: `MED-${seed}`,
+    kind: "api-code",
+    title: "Rolling Median Code Completion",
+    prompt: `Complete the missing Java code so this prints twice the median after each insertion.\n\nPriorityQueue<Integer> left = new PriorityQueue<Integer>(Collections.reverseOrder());\nPriorityQueue<Integer> right = new PriorityQueue<Integer>();\n\n// Decide which side gets val.\nif (val > left.peek())\n    __BLANK_A__;\nelse\n    __BLANK_B__;\n\n// Rebalance.\nif (left.size() > right.size()+1) __BLANK_C__;\nif (right.size() > left.size()+1) __BLANK_D__;\n\n// Print twice the median.\nif (left.size() > right.size())\n    System.out.println(__BLANK_E__);\nelse if (right.size() > left.size())\n    System.out.println(__BLANK_F__);\nelse\n    System.out.println(__BLANK_G__);`,
+    scenario,
+    points: 15,
+    quizParts: [
+      { id: "a", label: "Blank A", prompt: "Value goes to larger-half queue", answer: "right.offer(val)" },
+      { id: "b", label: "Blank B", prompt: "Value goes to smaller-half queue", answer: "left.offer(val)" },
+      { id: "c", label: "Blank C", prompt: "Move one from left to right", answer: "right.offer(left.poll())" },
+      { id: "d", label: "Blank D", prompt: "Move one from right to left", answer: "left.offer(right.poll())" },
+      { id: "e", label: "Blank E", prompt: "Left side has more items", answer: "2*left.peek()|left.peek()*2" },
+      { id: "f", label: "Blank F", prompt: "Right side has more items", answer: "2*right.peek()|right.peek()*2" },
+      { id: "g", label: "Blank G", prompt: "Same size", answer: "left.peek()+right.peek()|right.peek()+left.peek()" },
+    ],
+  });
+}
+
+function generateBacktrackingCode(_rng: () => number, seed: number, scenario: Scenario): Problem {
+  return quizProblem({
+    id: `BT-${seed}`,
+    kind: "backtracking-code",
+    title: "Prefix Composite Backtracking",
+    prompt: `Complete the recursive function from the prefix composite style question.\n\n// cur is a valid prefix-composite of k digits.\npublic static void go(int cur, int k, int n) {\n    if (__BLANK_A__) {\n        __BLANK_B__;\n        return;\n    }\n\n    for (int i=0; i<10; i++)\n        if (__BLANK_C__)\n            __BLANK_D__;\n}\n\npublic static boolean isprime(int n) {\n    for (int i=2; __BLANK_E__; i++)\n        if (n%i == 0) return false;\n    return true;\n}`,
+    scenario,
+    points: 15,
+    quizParts: [
+      { id: "a", label: "Blank A", prompt: "Base case", answer: "k == n" },
+      { id: "b", label: "Blank B", prompt: "Print completed number", answer: "System.out.println(cur)" },
+      { id: "c", label: "Blank C", prompt: "Only recurse if next prefix is composite", answer: "!isprime(10*cur+i)|isprime(10*cur+i) == false" },
+      { id: "d", label: "Blank D", prompt: "Recursive call", answer: "go(10*cur+i, k+1, n)" },
+      { id: "e", label: "Blank E", prompt: "O(sqrt(n)) loop condition", answer: "i*i<=n|i*i <= n" },
+    ],
+  });
+}
+
+function generateBacktrackingConcept(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const variant = pick(rng, ["prune", "magic", "queens"]);
+  if (variant === "magic") {
+    return quizProblem({
+      id: `BTC-${seed}`,
+      kind: "backtracking-concept",
+      title: "Hexagram Magic Sum Explanation",
+      prompt: "The exam asked why the Hexagram magic sum is found by adding the 12 input numbers and dividing by 3. Select the best explanation.",
+      scenario,
+      points: 5,
+      quizParts: [{
+        id: "why",
+        label: "Reason",
+        prompt: "Why divide the total by 3?",
+        answer: "Each number appears in exactly two of the six row sums, so 6X = 2*sum and X = sum/3.",
+        options: [
+          "Each number appears in exactly two of the six row sums, so 6X = 2*sum and X = sum/3.",
+          "There are three diagonals, so the average is the total divided by 3.",
+          "Backtracking always divides the search space by 3.",
+          "The largest three numbers determine the row sum.",
+        ],
+      }],
+    });
+  }
+  if (variant === "queens") {
+    return quizProblem({
+      id: `BTQ-${seed}`,
+      kind: "backtracking-concept",
+      title: "Five Queens Permutation",
+      prompt: "Using the exam visualization, the ith integer in the permutation is the row for the queen in column i. Enter the first lexicographic 5-queens solution.",
+      scenario,
+      points: 5,
+      visual: { type: "grid", grid: Array.from({ length: 5 }, () => Array(5).fill("")) },
+      quizParts: [{ id: "perm", label: "Permutation", prompt: "Rows by column, comma separated", answer: "1,3,5,2,4|1 3 5 2 4" }],
+    });
+  }
+  return quizProblem({
+    id: `BTP-${seed}`,
+    kind: "backtracking-concept",
+    title: "Tentaizu Pruning Line",
+    prompt: "In class, one pruning line was commented out and Tentaizu became much slower. What did that line conceptually do?",
+    scenario,
+    points: 5,
+    quizParts: [{
+      id: "prune",
+      label: "Short answer",
+      prompt: "Choose the best explanation.",
+      answer: "It rejected a board as soon as a completed square could no longer have the correct bomb count.",
+      options: [
+        "It rejected a board as soon as a completed square could no longer have the correct bomb count.",
+        "It sorted all possible boards before recursion.",
+        "It changed the answer format from recursive to iterative.",
+        "It counted every bomb after all recursive calls finished.",
+      ],
+    }],
+  });
+}
+
+function generateDsCode(_rng: () => number, seed: number, scenario: Scenario): Problem {
+  return quizProblem({
+    id: `DSC-${seed}`,
+    kind: "ds-code",
+    title: "Connected Regions with Disjoint Sets",
+    prompt: `Complete the grid connected-regions code. Only right and down neighbors are checked.\n\nfinal public static int[] DX = {0,1};\nfinal public static int[] DY = {1,0};\n\nfor (int i=0; i<r; i++) {\n  for (int j=0; j<c; j++) {\n    for (int k=0; k<2; k++) {\n      int nx = __BLANK_A__;\n      int ny = __BLANK_B__;\n      if (__BLANK_C__) continue;\n      if (__BLANK_D__)\n          __BLANK_E__;\n    }\n  }\n}`,
+    scenario,
+    points: 15,
+    visual: { type: "grid", grid: [["A", "A", "D", "B", "A"], ["A", "A", "D", "B", "B"], ["A", "D", "D", "C", "C"], ["A", "A", "D", "D", "C"]] },
+    quizParts: [
+      { id: "a", label: "Blank A", prompt: "Neighbor row", answer: "i + DX[k]|i+DX[k]" },
+      { id: "b", label: "Blank B", prompt: "Neighbor column", answer: "j + DY[k]|j+DY[k]" },
+      { id: "c", label: "Blank C", prompt: "Bounds check", answer: "nx>=r || ny>=c|nx >= r || ny >= c" },
+      { id: "d", label: "Blank D", prompt: "Same region check", answer: "g[i][j] == g[nx][ny]|g[i][j]==g[nx][ny]" },
+      { id: "e", label: "Blank E", prompt: "Union flattened cells", answer: "dj.union(i*c+j, nx*c+ny)|dj.union(i*c+j,nx*c+ny)" },
+    ],
+  });
+}
+
+function generateSkipConcept(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const variant = pick(rng, ["probability", "exception", "size"]);
+  if (variant === "probability") {
+    return quizProblem({
+      id: `SK-${seed}`,
+      kind: "skip-concept",
+      title: "Skip List Promotion Questions",
+      prompt: "Answer the exact style of short skip-list questions from Part D.",
+      scenario,
+      points: 9,
+      quizParts: [
+        { id: "x", label: "Suggested integer denominator", prompt: "The suggested fraction 1/x used what integer x?", answer: "4" },
+        { id: "y", label: "Suggested irrational denominator", prompt: "The suggested fraction 1/y used what irrational y?", answer: "e" },
+        { id: "fast", label: "Fastest in class", prompt: "Which suggested value performed fastest on the large test run?", answer: "4" },
+      ],
+    });
+  }
+  if (variant === "exception") {
+    return quizProblem({
+      id: `SKE-${seed}`,
+      kind: "skip-concept",
+      title: "Skip List New-Level Exception",
+      prompt: "In most circumstances, insertion follows the level k to level k+1 random promotion rule. What is the exception?",
+      scenario,
+      points: 3,
+      quizParts: [{
+        id: "exception",
+        label: "Exception",
+        prompt: "Choose the best answer.",
+        answer: "Do not create a new top level when the promoted value would be the only value on that new level.",
+        options: [
+          "Do not create a new top level when the promoted value would be the only value on that new level.",
+          "Never promote values larger than the current maximum.",
+          "Only promote a value when it is searched twice.",
+          "Delete all lower copies when a value reaches a higher level.",
+        ],
+      }],
+    });
+  }
+  return quizProblem({
+    id: `SKM-${seed}`,
+    kind: "skip-concept",
+    title: "Skip List Expected Size",
+    prompt: "Recall the series n + n/2 + n/4 + ... = 2n. Explain how it relates to skip-list storage.",
+    scenario,
+    points: 5,
+    quizParts: [
+      { id: "meaning", label: "Term meaning", prompt: "What does each term represent?", answer: "expected nodes on a level|nodes on each level" },
+      { id: "total", label: "Expected total", prompt: "Expected number of physical nodes for n values", answer: "2n|2*n" },
+      { id: "space", label: "Space complexity", prompt: "Asymptotic space complexity", answer: "O(n)" },
+    ],
+  });
+}
+
+function generateSkipStructure(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const values = shuffle(rng, range(9, 2).map((value) => value * 5)).slice(0, 6).sort((a, b) => a - b);
+  const levels = [
+    values,
+    values.filter((_, index) => index % 2 === 0),
+    values.filter((_, index) => index % 4 === 0),
+  ].filter((level) => level.length > 0).reverse();
+  const target = pick(rng, values);
+  const path = levels.map((level) => level.filter((value) => value <= target).at(-1) ?? "head").join(" -> ");
+  return quizProblem({
+    id: `SKT-${seed}`,
+    kind: "skip-structure",
+    title: "Skip List Search Trace",
+    prompt: `Trace a search for ${target}. At each level, move right while the next value is <= ${target}; otherwise drop down. Enter the landing value on each level from top to bottom, using "head" when no value is reached.`,
+    scenario,
+    points: 6,
+    visual: { type: "skip-list", levels },
+    quizParts: [{ id: "path", label: "Search path", prompt: "Top-to-bottom landing values", answer: path }],
+  });
+}
+
+function generateAnalysis(rng: () => number, seed: number, scenario: Scenario): Problem {
+  const variant = pick(rng, ["loop", "series", "notation"]);
+  if (variant === "series") {
+    const n = pick(rng, [8, 16, 32, 64]);
+    return quizProblem({
+      id: `ANA-${seed}`,
+      kind: "analysis-math",
+      title: "Finite and Infinite Series",
+      prompt: `Evaluate the growth of the series ${n} + ${n}/2 + ${n}/4 + ... and connect it to asymptotic notation.`,
+      scenario,
+      points: 5,
+      quizParts: [
+        { id: "sum", label: "Infinite sum", prompt: "What does n + n/2 + n/4 + ... equal?", answer: "2n|2*n" },
+        { id: "bound", label: "Big-O", prompt: "What is the asymptotic bound?", answer: "O(n)" },
+      ],
+    });
+  }
+  if (variant === "notation") {
+    return quizProblem({
+      id: `NOT-${seed}`,
+      kind: "analysis-math",
+      title: "Asymptotic Notation Definitions",
+      prompt: "Match the notation to its meaning. The professor specifically mentioned Big-O, Big-Omega, Big-Theta, and why Theta is used less often.",
+      scenario,
+      points: 8,
+      quizParts: [
+        { id: "o", label: "Big-O", prompt: "Big-O gives an asymptotic...", answer: "upper bound", options: ["upper bound", "lower bound", "exact bound", "random bound"] },
+        { id: "omega", label: "Big-Omega", prompt: "Big-Omega gives an asymptotic...", answer: "lower bound", options: ["upper bound", "lower bound", "syntax rule", "hash rule"] },
+        { id: "theta", label: "Big-Theta", prompt: "Big-Theta means...", answer: "both upper and lower bound|tight bound", options: ["both upper and lower bound", "only upper bound", "only lower bound", "always constant"] },
+      ],
+    });
+  }
+  return quizProblem({
+    id: `RUN-${seed}`,
+    kind: "analysis-math",
+    title: "Runtime of Code",
+    prompt: `Find the runtime of the code.\n\nfor (int i=1; i<=n; i*=2) {\n    for (int j=0; j<n; j++) {\n        sum++;\n    }\n}`,
+    scenario,
+    points: 5,
+    quizParts: [
+      { id: "outer", label: "Outer loop count", prompt: "How many times does the outer loop run?", answer: "O(log n)|log n|lg n" },
+      { id: "total", label: "Total runtime", prompt: "Total runtime", answer: "O(n log n)|O(n lg n)" },
+    ],
+  });
 }
 
 function generateDsArray(rng: () => number, seed: number, scenario: Scenario): Problem {
   const settings = {
     Basic: { sizes: [8], opCounts: [5, 6] },
     Worksheet: { sizes: [10], opCounts: [8, 9] },
+    Runtime: { sizes: [10], opCounts: [8, 9] },
+    Code: { sizes: [10], opCounts: [8, 9] },
+    Concept: { sizes: [10], opCounts: [8, 9] },
+    Trace: { sizes: [10], opCounts: [8, 9] },
+    Math: { sizes: [10], opCounts: [8, 9] },
+    Mock: { sizes: [10], opCounts: [8, 9] },
     Overflow: { sizes: [10], opCounts: [8, 9] },
     Borrow: { sizes: [10], opCounts: [8, 9] },
     Merge: { sizes: [12], opCounts: [10, 11] },
@@ -1263,6 +1628,7 @@ function App() {
     return Number.isFinite(saved) && saved > 0 ? saved : Date.now();
   });
   const [arrayAnswer, setArrayAnswer] = useState<number[]>([]);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [treeSteps, setTreeSteps] = useState<TreeNode[]>([]);
   const [rbSteps, setRbSteps] = useState<RBNode[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
@@ -1293,20 +1659,30 @@ function App() {
     setShowAnswer(false);
     if (problem.answerType === "array") {
       setArrayAnswer(Array(problem.expectedArray?.length ?? 0).fill(Number.NaN));
+      setQuizAnswers({});
       setTreeSteps([]);
       setRbSteps([]);
       setCurrentStep(0);
       setCurrentRBStep(0);
     } else if (problem.answerType === "tree") {
       setArrayAnswer([]);
+      setQuizAnswers({});
       setTreeSteps(problem.initialTree ? [cloneTree(problem.initialTree)] : []);
       setRbSteps([]);
       setCurrentStep(0);
       setCurrentRBStep(0);
-    } else {
+    } else if (problem.answerType === "rb") {
       setArrayAnswer([]);
+      setQuizAnswers({});
       setTreeSteps([]);
       setRbSteps(problem.initialRBTree ? [cloneRBTree(problem.initialRBTree)!] : []);
+      setCurrentStep(0);
+      setCurrentRBStep(0);
+    } else {
+      setArrayAnswer([]);
+      setQuizAnswers(Object.fromEntries((problem.quizParts ?? []).map((part) => [part.id, ""])));
+      setTreeSteps([]);
+      setRbSteps([]);
       setCurrentStep(0);
       setCurrentRBStep(0);
     }
@@ -1318,7 +1694,9 @@ function App() {
         ? JSON.stringify(arrayAnswer) === JSON.stringify(problem.expectedArray)
         : problem.answerType === "tree"
           ? normalizeTree(treeSteps[treeSteps.length - 1] ?? null) === normalizeTree(problem.expectedTree ?? null)
-          : normalizeRBTree(rbSteps[rbSteps.length - 1] ?? null) === normalizeRBTree(problem.expectedRBTree ?? null);
+          : problem.answerType === "rb"
+            ? normalizeRBTree(rbSteps[rbSteps.length - 1] ?? null) === normalizeRBTree(problem.expectedRBTree ?? null)
+            : (problem.quizParts ?? []).every((part) => quizMatches(quizAnswers[part.id] ?? "", part.answer));
 
     setResult(correct ? "correct" : "wrong");
     setStats((current) => {
@@ -1343,7 +1721,9 @@ function App() {
       ? "Array answer"
       : problem.answerType === "tree"
         ? "2-4 tree drawing"
-        : "Red-black tree drawing";
+        : problem.answerType === "rb"
+          ? "Red-black tree drawing"
+          : "Exam-style blanks";
 
   return (
     <main className="app-shell">
@@ -1399,7 +1779,7 @@ function App() {
             <h2>{problem.title}</h2>
             <div className="meta-row">
               <span>{answerMode}</span>
-              <span>{problem.trace.length} answer steps</span>
+              <span>{problem.points ?? problem.trace.length} pts</span>
             </div>
           </div>
           <div className="topbar-actions">
@@ -1435,6 +1815,7 @@ function App() {
           )}
           {problem.initialTree && <TreeView root={problem.initialTree} label="Starting tree" />}
           {problem.initialRBTree && <RBTreeView root={problem.initialRBTree} label="Starting tree" />}
+          {problem.visual && <ProblemVisual visual={problem.visual} />}
         </section>
 
         <section className="answer-panel">
@@ -1463,12 +1844,18 @@ function App() {
               onCurrentStepChange={setCurrentStep}
               onStepsChange={setTreeSteps}
             />
-          ) : (
+          ) : problem.answerType === "rb" ? (
             <RBStepBuilder
               steps={rbSteps}
               currentStep={currentRBStep}
               onCurrentStepChange={setCurrentRBStep}
               onStepsChange={setRbSteps}
+            />
+          ) : (
+            <QuizAnswer
+              parts={problem.quizParts ?? []}
+              values={quizAnswers}
+              onChange={setQuizAnswers}
             />
           )}
           {result !== "idle" && (
@@ -1492,6 +1879,17 @@ function App() {
 }
 
 function buildExplanation(problem: Problem) {
+  if (problem.answerType === "quiz") {
+    return {
+      heading: "Rubric and expected answers",
+      summary: "These are graded like the old exam PDFs: most blanks are all-or-nothing, and short answers need the core idea even if the wording differs.",
+      steps: (problem.quizParts ?? []).map((part, index) => ({
+        title: `${index + 1}. ${part.label}`,
+        detail: part.answer.replaceAll("|", " or "),
+      })),
+    };
+  }
+
   if (problem.answerType === "array") {
     return {
       heading: "How the parent array is built",
@@ -1556,8 +1954,10 @@ function AnswerModal({
             <ArrayView indexes={problem.indexes ?? []} values={problem.expectedArray ?? []} />
           ) : problem.answerType === "tree" ? (
             problem.expectedTree && <TreeView root={problem.expectedTree} label="Final tree" />
-          ) : (
+          ) : problem.answerType === "rb" ? (
             problem.expectedRBTree && <RBTreeView root={problem.expectedRBTree} label="Final tree" />
+          ) : (
+            <ExpectedQuiz parts={problem.quizParts ?? []} />
           )}
         </section>
 
@@ -1574,6 +1974,84 @@ function AnswerModal({
           </ol>
         </section>
       </section>
+    </div>
+  );
+}
+
+function ProblemVisual({ visual }: { visual: NonNullable<Problem["visual"]> }) {
+  if (visual.type === "skip-list" && visual.levels) {
+    return (
+      <div className="skip-visual">
+        {visual.levels.map((level, index) => (
+          <div className="skip-level" key={`level-${index}`}>
+            <span className="skip-label">L{visual.levels!.length - index - 1}</span>
+            <span className="skip-node sentinel">head</span>
+            {level.map((value) => <span className="skip-node" key={`${index}-${value}`}>{value}</span>)}
+            <span className="skip-node sentinel">tail</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (visual.type === "grid" && visual.grid) {
+    return (
+      <div className="letter-grid" style={{ gridTemplateColumns: `repeat(${visual.grid[0]?.length ?? 1}, 42px)` }}>
+        {visual.grid.flatMap((row, rowIndex) =>
+          row.map((cell, colIndex) => <div className="letter-cell" key={`${rowIndex}-${colIndex}`}>{cell}</div>),
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function QuizAnswer({
+  parts,
+  values,
+  onChange,
+}: {
+  parts: QuizPart[];
+  values: Record<string, string>;
+  onChange: (values: Record<string, string>) => void;
+}) {
+  return (
+    <div className="quiz-answer">
+      {parts.map((part) => (
+        <label className="quiz-part" key={part.id}>
+          <span>{part.label}</span>
+          <small>{part.prompt}</small>
+          {part.options ? (
+            <select
+              value={values[part.id] ?? ""}
+              onChange={(event) => onChange({ ...values, [part.id]: event.target.value })}
+            >
+              <option value="">Choose an answer</option>
+              {part.options.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          ) : (
+            <input
+              value={values[part.id] ?? ""}
+              onChange={(event) => onChange({ ...values, [part.id]: event.target.value })}
+              placeholder="Type the exam-style answer"
+            />
+          )}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function ExpectedQuiz({ parts }: { parts: QuizPart[] }) {
+  return (
+    <div className="expected-quiz">
+      {parts.map((part) => (
+        <div key={part.id}>
+          <strong>{part.label}</strong>
+          <span>{part.answer.replaceAll("|", " or ")}</span>
+        </div>
+      ))}
     </div>
   );
 }
