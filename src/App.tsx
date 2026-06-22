@@ -7,7 +7,6 @@ import {
   ListTree,
   Network,
   RotateCcw,
-  Shuffle,
   Sigma,
   SplitSquareHorizontal,
   Trash2,
@@ -16,7 +15,7 @@ import {
 import type { DragEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-type Topic = "api" | "backtracking" | "sets" | "insert" | "delete" | "rb-insert" | "rb-delete" | "skip" | "analysis" | "exam" | "mixed";
+type Topic = "api" | "backtracking" | "sets" | "insert" | "delete" | "rb-insert" | "rb-delete" | "skip" | "analysis";
 type ProblemKind =
   | "api-runtime"
   | "api-code"
@@ -165,8 +164,6 @@ const TOPICS: { id: Topic; label: string; icon: typeof Network }[] = [
   { id: "rb-delete", label: "RB Delete", icon: GitBranch },
   { id: "skip", label: "Skip Lists", icon: ListTree },
   { id: "analysis", label: "Analysis", icon: Sigma },
-  { id: "exam", label: "Exam Mode", icon: Shuffle },
-  { id: "mixed", label: "Mixed Review", icon: Shuffle },
 ];
 
 const SCENARIOS: Record<Topic, Scenario[]> = {
@@ -179,8 +176,6 @@ const SCENARIOS: Record<Topic, Scenario[]> = {
   "rb-delete": ["Basic", "BlackLeaf", "SiblingRed", "Borrow", "DoubleRotate", "Cascade"],
   skip: ["Concept", "Trace", "Math"],
   analysis: ["Runtime", "Math", "Concept"],
-  exam: ["Mock"],
-  mixed: ["Worksheet", "Overflow", "Merge", "Cascade"],
 };
 
 const SCENARIO_LABELS: Record<Scenario, string> = {
@@ -940,16 +935,13 @@ function generateProblem(topic: Topic, seed: number, scenario: Scenario): Proble
                 ? scenario === "Trace" ? "skip-structure" : "skip-concept"
                 : topic === "analysis"
                   ? "analysis-math"
-                  : topic === "exam"
-                    ? pick(rng, ["api-runtime", "api-code", "backtracking-code", "ds-code", "tree-delete", "rb-delete", "skip-structure", "analysis-math"] as ProblemKind[])
-                    : pick(rng, ["ds-array", "tree-insert", "tree-delete", "rb-insert", "skip-concept", "analysis-math"] as ProblemKind[]);
+                  : "analysis-math";
 
   if (kind === "api-runtime") return generateApiRuntime(rng, seed, scenario);
   if (kind === "api-code") return generateRollingMedian(rng, seed, scenario);
   if (kind === "backtracking-code") return generateBacktrackingCode(rng, seed, scenario);
   if (kind === "backtracking-concept") return generateBacktrackingConcept(rng, seed, scenario);
   if (kind === "ds-array") return generateDsArray(rng, seed, scenario);
-  if (kind === "ds-code") return generateDsCode(rng, seed, scenario);
   if (kind === "tree-delete") return generateTreeDelete(rng, seed, scenario);
   if (kind === "rb-insert") return generateRBInsert(rng, seed, scenario);
   if (kind === "rb-delete") return generateRBDelete(rng, seed, scenario);
