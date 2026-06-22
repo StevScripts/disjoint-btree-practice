@@ -520,54 +520,48 @@ button:disabled {
   background: oklch(0.94 0.045 25);
 }
 
-.detach-drop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 58px;
-  padding: 10px 12px;
+.detach-tray {
+  display: grid;
+  gap: 7px;
+  min-height: 92px;
+  padding: 10px;
   border: 1px dashed oklch(0.55 0.08 225);
   border-radius: 8px;
   background: oklch(0.955 0.02 225);
   color: oklch(0.28 0.035 245);
 }
 
-.detach-drop.has-pieces {
-  align-items: flex-start;
-}
-
-.detach-drop strong,
-.detach-drop span {
+.detach-tray strong,
+.detach-tray span,
+.detach-tray p {
   display: block;
 }
 
-.detach-drop strong {
-  font-size: 0.9rem;
+.detach-tray strong {
+  font-size: 0.82rem;
   font-weight: 850;
 }
 
-.detach-drop span {
-  margin-top: 2px;
+.detach-tray span,
+.detach-tray p {
+  margin: 0;
   color: oklch(0.42 0.018 245);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   line-height: 1.35;
 }
 
 .loose-subtree-list {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 180px;
+  gap: 6px;
 }
 
 .loose-subtree-chip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 34px;
+  padding: 0 9px;
   border: 2px solid transparent;
   border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1119,16 +1113,6 @@ button.rb-node {
 
   .tree-workbench {
     display: grid;
-  }
-
-  .detach-drop {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .loose-subtree-list {
-    justify-content: flex-start;
-    min-width: 0;
   }
 
   .builder-palette {

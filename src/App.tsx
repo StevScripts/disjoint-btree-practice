@@ -2239,36 +2239,6 @@ function RBStepBuilder({
         Drop RB nodes here
       </div>
 
-      <div
-        className={looseSubtrees.length > 0 ? "detach-drop has-pieces" : "detach-drop"}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          detachToWorkbench(readDragPayload(event));
-        }}
-      >
-        <div>
-          <strong>Loose subtrees</strong>
-          <span>Drag a non-root node here to detach it, then drop it on an L or R slot.</span>
-        </div>
-        {looseSubtrees.length > 0 && (
-          <div className="loose-subtree-list">
-            {looseSubtrees.map((subtree) => (
-              <button
-                className={`loose-subtree-chip ${subtree.color}`}
-                draggable
-                key={subtree.id}
-                onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.id })}
-                title="Drag this subtree onto a left or right slot."
-              >
-                {subtree.key}
-                {(subtree.left || subtree.right) && <span>subtree</span>}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
       <div className="tree-workbench">
         <aside className="builder-palette">
           <h4>Palette</h4>
@@ -2293,10 +2263,39 @@ function RBStepBuilder({
           >
             {canDragKey ? paletteKeyNumber : "Set key"}
           </button>
+          <div
+            className={looseSubtrees.length > 0 ? "detach-tray has-pieces" : "detach-tray"}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              detachToWorkbench(readDragPayload(event));
+            }}
+          >
+            <strong>Loose subtrees</strong>
+            <span>Drop a non-root node here.</span>
+            {looseSubtrees.length > 0 ? (
+              <div className="loose-subtree-list">
+                {looseSubtrees.map((subtree) => (
+                  <button
+                    className={`loose-subtree-chip ${subtree.color}`}
+                    draggable
+                    key={subtree.id}
+                    onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.id })}
+                    title="Drag this subtree onto a left or right slot."
+                  >
+                    {subtree.key}
+                    {(subtree.left || subtree.right) && <span>subtree</span>}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p>No loose pieces</p>
+            )}
+          </div>
         </aside>
 
         <div>
-          <p className="hint">Drag a node to Loose subtrees to detach it. Drag loose subtrees back onto L or R slots. Dropping onto a filled slot swaps the old child into the loose area.</p>
+          <p className="hint">Use the side tray to detach subtrees. Drag loose pieces back onto L or R slots. Dropping onto a filled slot swaps the old child into the tray.</p>
           <EditableRBTree root={currentTree} onChange={updateCurrentTree} onAttachLoose={attachLooseSubtree} />
         </div>
       </div>
