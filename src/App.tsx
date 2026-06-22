@@ -1,5 +1,4 @@
 import {
-  Binary,
   CheckCircle2,
   CirclePlus,
   GitBranch,
@@ -1339,11 +1338,17 @@ function App() {
 
   const accuracy = stats.attempted === 0 ? 0 : Math.round((stats.correct / stats.attempted) * 100);
   const explanation = buildExplanation(problem);
+  const answerMode =
+    problem.answerType === "array"
+      ? "Array answer"
+      : problem.answerType === "tree"
+        ? "2-4 tree drawing"
+        : "Red-black tree drawing";
 
   return (
     <main className="app-shell">
       <aside className="sidebar">
-        <div>
+        <div className="brand-block">
           <p className="eyebrow">COP 3503C</p>
           <h1>Structure Practice</h1>
         </div>
@@ -1366,17 +1371,36 @@ function App() {
           })}
         </nav>
         <section className="stats">
-          <span>{accuracy}%</span>
-          <p>{stats.correct}/{stats.attempted} correct</p>
-          <p>Streak {stats.streak}, best {stats.bestStreak}</p>
+          <div className="stat-primary">
+            <span>{accuracy}%</span>
+            <p>accuracy</p>
+          </div>
+          <div className="stat-grid">
+            <div>
+              <strong>{stats.correct}/{stats.attempted}</strong>
+              <span>correct</span>
+            </div>
+            <div>
+              <strong>{stats.streak}</strong>
+              <span>streak</span>
+            </div>
+            <div>
+              <strong>{stats.bestStreak}</strong>
+              <span>best</span>
+            </div>
+          </div>
         </section>
       </aside>
 
       <section className="workspace">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">{problem.id} · {problem.scenario}</p>
+          <div className="problem-title">
+            <p className="eyebrow">{problem.id} · {SCENARIO_LABELS[problem.scenario]}</p>
             <h2>{problem.title}</h2>
+            <div className="meta-row">
+              <span>{answerMode}</span>
+              <span>{problem.trace.length} answer steps</span>
+            </div>
           </div>
           <div className="topbar-actions">
             <div className="scenario-control" aria-label="Practice scenario">
@@ -1399,6 +1423,12 @@ function App() {
         </header>
 
         <section className="problem-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Prompt</p>
+              <h3>Starting point</h3>
+            </div>
+          </div>
           <pre>{problem.prompt}</pre>
           {problem.initialArray && (
             <ArrayView indexes={problem.indexes ?? []} values={problem.initialArray} />
@@ -1409,8 +1439,16 @@ function App() {
 
         <section className="answer-panel">
           <div className="panel-heading">
-            <h3>Your answer</h3>
-            <Binary size={18} />
+            <div>
+              <p className="eyebrow">Workspace</p>
+              <h3>Your answer</h3>
+            </div>
+            <div className="panel-tools">
+              <button className="secondary" onClick={() => setShowAnswer(true)}>
+                Show answer
+              </button>
+              <button className="primary" onClick={checkAnswer}>Check</button>
+            </div>
           </div>
           {problem.answerType === "array" ? (
             <ArrayAnswer
@@ -1433,12 +1471,6 @@ function App() {
               onStepsChange={setRbSteps}
             />
           )}
-          <div className="actions">
-            <button className="primary" onClick={checkAnswer}>Check</button>
-            <button className="secondary" onClick={() => setShowAnswer(true)}>
-              Show answer
-            </button>
-          </div>
           {result !== "idle" && (
             <div className={result === "correct" ? "result correct" : "result wrong"}>
               {result === "correct" ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
