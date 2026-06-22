@@ -707,6 +707,12 @@ button:focus-visible {
   color: oklch(0.92 0.03 155);
 }
 
+.palette-chip.parent {
+  border-color: oklch(0.72 0.12 230 / 0.58);
+  background: oklch(0.25 0.06 235);
+  color: oklch(0.92 0.06 230);
+}
+
 .color-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

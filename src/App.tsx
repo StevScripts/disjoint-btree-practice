@@ -1,13 +1,9 @@
 import {
-  Brain,
   CheckCircle2,
   CirclePlus,
-  Code2,
   GitBranch,
-  ListTree,
   Network,
   RotateCcw,
-  Sigma,
   SplitSquareHorizontal,
   Trash2,
   XCircle,
@@ -155,15 +151,11 @@ type Stats = {
 };
 
 const TOPICS: { id: Topic; label: string; icon: typeof Network }[] = [
-  { id: "api", label: "Java API", icon: Code2 },
-  { id: "backtracking", label: "Backtracking", icon: Brain },
   { id: "sets", label: "Disjoint Sets", icon: Network },
   { id: "insert", label: "2-4 Insert", icon: SplitSquareHorizontal },
   { id: "delete", label: "2-4 Delete", icon: Trash2 },
   { id: "rb-insert", label: "RB Insert", icon: GitBranch },
   { id: "rb-delete", label: "RB Delete", icon: GitBranch },
-  { id: "skip", label: "Skip Lists", icon: ListTree },
-  { id: "analysis", label: "Analysis", icon: Sigma },
 ];
 
 const SCENARIOS: Record<Topic, Scenario[]> = {
@@ -1511,6 +1503,16 @@ function updateTreeNode(root: TreeNode, nodeId: string, updater: (node: TreeNode
   };
 }
 
+function findTreeNode(root: TreeNode | null, nodeId: string): TreeNode | null {
+  if (!root) return null;
+  if (root.id === nodeId) return root;
+  for (const child of root.children) {
+    const found = findTreeNode(child, nodeId);
+    if (found) return found;
+  }
+  return null;
+}
+
 function addKeyToNode(root: TreeNode, nodeId: string, key: number): TreeNode {
   return updateTreeNode(root, nodeId, (node) => ({
     ...node,
@@ -1532,6 +1534,36 @@ function addChildToNode(root: TreeNode, nodeId: string): TreeNode {
   }));
 }
 
+function insertChildToNode(root: TreeNode, nodeId: string, child: TreeNode, index: number): TreeNode {
+  return updateTreeNode(root, nodeId, (node) => {
+    const childIndex = Math.max(0, Math.min(index, node.children.length));
+    return {
+      ...node,
+      children: [
+        ...node.children.slice(0, childIndex),
+        child,
+        ...node.children.slice(childIndex),
+      ],
+    };
+  });
+}
+
+function addKeyChildToNode(root: TreeNode, nodeId: string, key: number, index: number): TreeNode {
+  return insertChildToNode(root, nodeId, { id: nextNodeId(), keys: [key], children: [] }, index);
+}
+
+function addEmptyChildToNode(root: TreeNode, nodeId: string, index: number): TreeNode {
+  return insertChildToNode(root, nodeId, { id: nextNodeId(), keys: [], children: [] }, index);
+}
+
+function wrapTreeWithParent(root: TreeNode, parentKey: number | null): TreeNode {
+  return {
+    id: nextNodeId(),
+    keys: parentKey === null ? [] : [parentKey],
+    children: [root],
+  };
+}
+
 function removeChildFromNode(root: TreeNode, nodeId: string): TreeNode {
   const remove = (node: TreeNode): TreeNode | null => {
     if (node.id === nodeId) return null;
@@ -1548,19 +1580,6 @@ function clearChildrenFromNode(root: TreeNode, nodeId: string): TreeNode {
     ...node,
     children: [],
   }));
-}
-
-function moveKey(root: TreeNode, fromId: string, fromIndex: number, toId: string): TreeNode {
-  let movedKey: number | null = null;
-  const withoutKey = updateTreeNode(root, fromId, (node) => {
-    movedKey = node.keys[fromIndex];
-    return {
-      ...node,
-      keys: node.keys.filter((_, index) => index !== fromIndex),
-    };
-  });
-  if (movedKey === null) return root;
-  return addKeyToNode(withoutKey, toId, movedKey);
 }
 
 function updateRBNode(root: RBNode, nodeId: string, updater: (node: RBNode) => RBNode): RBNode {
@@ -2480,6 +2499,7 @@ function TreeStepBuilder({
 
   const paletteKeyNumber = Number(paletteKey);
   const canDragKey = paletteKey.trim() !== "" && Number.isFinite(paletteKeyNumber);
+  const parentKey = canDragKey ? paletteKeyNumber : null;
 
   const handleTrashDrop = (payload: DragPayload | null) => {
     if (!payload) return;
@@ -2559,10 +2579,17 @@ function TreeStepBuilder({
           >
             Empty child
           </button>
+          <button
+            className="palette-chip parent"
+            onClick={() => updateCurrentTree(wrapTreeWithParent(currentTree, parentKey))}
+            title="Create a new root above the current tree."
+          >
+            {parentKey === null ? "Parent above root" : `Parent with ${parentKey}`}
+          </button>
         </aside>
 
         <div>
-          <p className="hint">Drag keys or empty children from the palette onto nodes. Drag keys between nodes. Drag a node to trash to remove that whole subtree.</p>
+          <p className="hint">Drop a key on a node to add it there, or below a node to create a child in that position. Use Parent above root when a split creates a new root.</p>
           <EditableTree root={currentTree} onChange={updateCurrentTree} />
         </div>
       </div>
@@ -2573,8 +2600,91 @@ function TreeStepBuilder({
 function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: TreeNode) => void }) {
   const layout = buildTreeLayout(root);
 
+  const inferChildIndex = (layoutNode: LayoutNode, dropX: number) => {
+    const slots = Math.max(1, layoutNode.node.keys.length + 1);
+    const left = layoutNode.x - layoutNode.width / 2;
+    const relativeX = Math.max(0, Math.min(layoutNode.width - 1, dropX - left));
+    return Math.floor((relativeX / layoutNode.width) * slots);
+  };
+
+  const dropNearNode = (event: DragEvent<HTMLDivElement>) => {
+    const payload = readDragPayload(event);
+    if (!payload || payload.type === "tree-node" || payload.type === "rb-node" || payload.type === "rb-loose-node" || payload.type === "rb-palette-node") return;
+
+    const stage = event.currentTarget.querySelector(".tree-stage");
+    const bounds = stage?.getBoundingClientRect();
+    if (!bounds) return;
+
+    const dropX = event.clientX - bounds.left;
+    const dropY = event.clientY - bounds.top;
+    const belowParent = layout.nodes
+      .filter((layoutNode) => (
+        dropY > layoutNode.y + TREE_NODE_HEIGHT + 12
+        && Math.abs(dropX - layoutNode.x) <= Math.max(120, layoutNode.width / 2 + 90)
+      ))
+      .map((layoutNode) => ({
+        layoutNode,
+        distance: Math.hypot(dropX - layoutNode.x, dropY - (layoutNode.y + TREE_NODE_HEIGHT / 2)),
+        verticalGap: dropY - (layoutNode.y + TREE_NODE_HEIGHT),
+        horizontalGap: Math.abs(dropX - layoutNode.x),
+      }))
+      .sort((a, b) => (a.verticalGap - b.verticalGap) || (a.horizontalGap - b.horizontalGap))[0];
+
+    const closest = belowParent ?? layout.nodes
+      .map((layoutNode) => {
+        const nodeCenterX = layoutNode.x;
+        const nodeCenterY = layoutNode.y + TREE_NODE_HEIGHT / 2;
+        return {
+          layoutNode,
+          distance: Math.hypot(dropX - nodeCenterX, dropY - nodeCenterY),
+        };
+      })
+      .sort((a, b) => a.distance - b.distance)[0];
+
+    if (!closest || (!belowParent && closest.distance > 170)) return;
+
+    const shouldCreateChild = Boolean(belowParent) || dropY > closest.layoutNode.y + TREE_NODE_HEIGHT + 12;
+    const childIndex = inferChildIndex(closest.layoutNode, dropX);
+
+    if (payload.type === "palette-key") {
+      onChange(
+        shouldCreateChild
+          ? addKeyChildToNode(root, closest.layoutNode.node.id, payload.key, childIndex)
+          : addKeyToNode(root, closest.layoutNode.node.id, payload.key),
+      );
+    }
+
+    if (payload.type === "tree-key") {
+      const sourceNode = findTreeNode(root, payload.fromId);
+      const movedKey = sourceNode?.keys[payload.fromIndex];
+      if (movedKey === undefined) return;
+      const withoutKey = removeKeyFromNode(root, payload.fromId, payload.fromIndex);
+      onChange(
+        shouldCreateChild
+          ? addKeyChildToNode(withoutKey, closest.layoutNode.node.id, movedKey, childIndex)
+          : addKeyToNode(withoutKey, closest.layoutNode.node.id, movedKey),
+      );
+    }
+
+    if (payload.type === "new-child") {
+      onChange(
+        shouldCreateChild
+          ? addEmptyChildToNode(root, closest.layoutNode.node.id, childIndex)
+          : addChildToNode(root, closest.layoutNode.node.id),
+      );
+    }
+  };
+
   return (
-    <div className="tree-canvas" aria-label="B-tree drawing canvas">
+    <div
+      className="tree-canvas"
+      aria-label="B-tree drawing canvas"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        dropNearNode(event);
+      }}
+    >
       <div className="tree-stage" style={{ width: layout.width, height: layout.height }}>
         <svg className="tree-lines" width={layout.width} height={layout.height} aria-hidden="true">
           {layout.lines.map((line, index) => (
@@ -2625,21 +2735,6 @@ function EditableTreeNode({
         top: layoutNode.y,
       }}
       onDragStart={(event) => writeDragPayload(event, { type: "tree-node", nodeId: node.id })}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        const payload = readDragPayload(event);
-        if (!payload) return;
-        if (payload.type === "palette-key") {
-          onChange(addKeyToNode(root, node.id, payload.key));
-        }
-        if (payload.type === "tree-key") {
-          onChange(moveKey(root, payload.fromId, payload.fromIndex, node.id));
-        }
-        if (payload.type === "new-child") {
-          onChange(addChildToNode(root, node.id));
-        }
-      }}
     >
       <div className="key-row">
         {node.keys.length === 0 && <span className="empty-node">empty</span>}
@@ -2658,7 +2753,7 @@ function EditableTreeNode({
           </button>
         ))}
       </div>
-      <div className="node-caption">{canRemove ? "Drag node to trash" : "Root: drop child here"}</div>
+      <div className="node-caption">{canRemove ? "Drag to trash" : "Root"}</div>
     </div>
   );
 }
