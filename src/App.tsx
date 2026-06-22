@@ -671,9 +671,18 @@ function writeDragPayload(event: DragEvent, payload: DragPayload) {
 }
 
 function App() {
-  const [topic, setTopic] = useState<Topic>("sets");
-  const [scenario, setScenario] = useState<Scenario>("Worksheet");
-  const [seed, setSeed] = useState(() => Date.now());
+  const [topic, setTopic] = useState<Topic>(() => {
+    const saved = localStorage.getItem("structure-practice-topic") as Topic | null;
+    return saved && TOPICS.some((item) => item.id === saved) ? saved : "sets";
+  });
+  const [scenario, setScenario] = useState<Scenario>(() => {
+    const saved = localStorage.getItem("structure-practice-scenario") as Scenario | null;
+    return saved && Object.hasOwn(SCENARIO_LABELS, saved) ? saved : "Worksheet";
+  });
+  const [seed, setSeed] = useState(() => {
+    const saved = Number(localStorage.getItem("structure-practice-seed"));
+    return Number.isFinite(saved) && saved > 0 ? saved : Date.now();
+  });
   const [arrayAnswer, setArrayAnswer] = useState<number[]>([]);
   const [treeSteps, setTreeSteps] = useState<TreeNode[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
@@ -691,6 +700,12 @@ function App() {
   useEffect(() => {
     localStorage.setItem("structure-practice-stats", JSON.stringify(stats));
   }, [stats]);
+
+  useEffect(() => {
+    localStorage.setItem("structure-practice-topic", topic);
+    localStorage.setItem("structure-practice-scenario", activeScenario);
+    localStorage.setItem("structure-practice-seed", String(seed));
+  }, [topic, activeScenario, seed]);
 
   useEffect(() => {
     setResult("idle");
@@ -747,7 +762,6 @@ function App() {
                 onClick={() => {
                   setTopic(item.id);
                   setScenario(SCENARIOS[item.id][0]);
-                  setSeed(Date.now());
                 }}
               >
                 <Icon size={18} />
@@ -777,7 +791,6 @@ function App() {
                   key={level}
                   onClick={() => {
                     setScenario(level);
-                    setSeed(Date.now());
                   }}
                 >
                   {SCENARIO_LABELS[level]}
