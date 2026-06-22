@@ -9,6 +9,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import type { DragEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 type Topic = "sets" | "insert" | "delete" | "mixed";
@@ -24,6 +25,12 @@ type TreeNode = {
   keys: number[];
   children: TreeNode[];
 };
+
+type DragPayload =
+  | { type: "palette-key"; key: number }
+  | { type: "tree-key"; fromId: string; fromIndex: number }
+  | { type: "new-child" }
+  | { type: "tree-node"; nodeId: string };
 
 type Problem = {
   id: string;
@@ -461,6 +468,13 @@ function removeChildFromNode(root: TreeNode, nodeId: string): TreeNode {
   return remove(root) ?? root;
 }
 
+function clearChildrenFromNode(root: TreeNode, nodeId: string): TreeNode {
+  return updateTreeNode(root, nodeId, (node) => ({
+    ...node,
+    children: [],
+  }));
+}
+
 function moveKey(root: TreeNode, fromId: string, fromIndex: number, toId: string): TreeNode {
   let movedKey: number | null = null;
   const withoutKey = updateTreeNode(root, fromId, (node) => {
@@ -472,6 +486,21 @@ function moveKey(root: TreeNode, fromId: string, fromIndex: number, toId: string
   });
   if (movedKey === null) return root;
   return addKeyToNode(withoutKey, toId, movedKey);
+}
+
+function readDragPayload(event: DragEvent): DragPayload | null {
+  const raw = event.dataTransfer.getData("application/json");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as DragPayload;
+  } catch {
+    return null;
+  }
+}
+
+function writeDragPayload(event: DragEvent, payload: DragPayload) {
+  event.dataTransfer.setData("application/json", JSON.stringify(payload));
+  event.dataTransfer.effectAllowed = "move";
 }
 
 function App() {
@@ -695,6 +724,7 @@ function TreeStepBuilder({
   onStepsChange: (steps: TreeNode[]) => void;
 }) {
   const currentTree = steps[currentStep];
+  const [paletteKey, setPaletteKey] = useState("");
 
   const updateCurrentTree = (tree: TreeNode) => {
     onStepsChange(steps.map((step, index) => (index === currentStep ? tree : step)));
@@ -717,6 +747,23 @@ function TreeStepBuilder({
   if (!currentTree) {
     return <p className="parse-error">No starting tree was generated.</p>;
   }
+
+  const paletteKeyNumber = Number(paletteKey);
+  const canDragKey = paletteKey.trim() !== "" && Number.isFinite(paletteKeyNumber);
+
+  const handleTrashDrop = (payload: DragPayload | null) => {
+    if (!payload) return;
+    if (payload.type === "tree-key") {
+      updateCurrentTree(removeKeyFromNode(currentTree, payload.fromId, payload.fromIndex));
+    }
+    if (payload.type === "tree-node") {
+      if (payload.nodeId === currentTree.id) {
+        updateCurrentTree(clearChildrenFromNode(currentTree, currentTree.id));
+      } else {
+        updateCurrentTree(removeChildFromNode(currentTree, payload.nodeId));
+      }
+    }
+  };
 
   return (
     <div className="tree-builder">
@@ -743,15 +790,59 @@ function TreeStepBuilder({
         </div>
       </div>
 
-      <p className="hint">Drag keys between nodes, add children to shape the tree, and add a new step whenever the tree changes.</p>
-      <EditableTree root={currentTree} onChange={updateCurrentTree} />
+      <div
+        className="trash-drop"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          handleTrashDrop(readDragPayload(event));
+        }}
+      >
+        <Trash2 size={18} />
+        Drop keys or nodes here
+      </div>
+
+      <div className="tree-workbench">
+        <aside className="builder-palette">
+          <h4>Palette</h4>
+          <label>
+            Key
+            <input
+              inputMode="numeric"
+              value={paletteKey}
+              onChange={(event) => setPaletteKey(event.target.value)}
+              placeholder="47"
+            />
+          </label>
+          <button
+            className="palette-chip"
+            draggable={canDragKey}
+            disabled={!canDragKey}
+            onDragStart={(event) => writeDragPayload(event, { type: "palette-key", key: paletteKeyNumber })}
+          >
+            {canDragKey ? paletteKeyNumber : "Set key"}
+          </button>
+          <button
+            className="palette-chip child"
+            draggable
+            onDragStart={(event) => writeDragPayload(event, { type: "new-child" })}
+          >
+            Empty child
+          </button>
+        </aside>
+
+        <div>
+          <p className="hint">Drag keys or empty children from the palette onto nodes. Drag keys between nodes. Drag a node to trash to remove that whole subtree.</p>
+          <EditableTree root={currentTree} onChange={updateCurrentTree} />
+        </div>
+      </div>
     </div>
   );
 }
 
 function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: TreeNode) => void }) {
   return (
-    <div className="tree-canvas">
+    <div className="tree-canvas" aria-label="B-tree drawing canvas">
       <EditableTreeNode root={root} node={root} onChange={onChange} canRemove={false} />
     </div>
   );
@@ -768,26 +859,26 @@ function EditableTreeNode({
   onChange: (tree: TreeNode) => void;
   canRemove: boolean;
 }) {
-  const [newKey, setNewKey] = useState("");
-
-  const addKey = () => {
-    const value = Number(newKey);
-    if (!Number.isFinite(value)) return;
-    onChange(addKeyToNode(root, node.id, value));
-    setNewKey("");
-  };
-
   return (
     <div className="edit-node-wrap">
       <div
         className="edit-node"
+        draggable
+        onDragStart={(event) => writeDragPayload(event, { type: "tree-node", nodeId: node.id })}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
-          const raw = event.dataTransfer.getData("application/json");
-          if (!raw) return;
-          const data = JSON.parse(raw) as { fromId: string; fromIndex: number };
-          onChange(moveKey(root, data.fromId, data.fromIndex, node.id));
+          const payload = readDragPayload(event);
+          if (!payload) return;
+          if (payload.type === "palette-key") {
+            onChange(addKeyToNode(root, node.id, payload.key));
+          }
+          if (payload.type === "tree-key") {
+            onChange(moveKey(root, payload.fromId, payload.fromIndex, node.id));
+          }
+          if (payload.type === "new-child") {
+            onChange(addChildToNode(root, node.id));
+          }
         }}
       >
         <div className="key-row">
@@ -798,34 +889,16 @@ function EditableTreeNode({
               draggable
               key={`${node.id}-${key}-${index}`}
               onDragStart={(event) => {
-                event.dataTransfer.setData("application/json", JSON.stringify({ fromId: node.id, fromIndex: index }));
+                event.stopPropagation();
+                writeDragPayload(event, { type: "tree-key", fromId: node.id, fromIndex: index });
               }}
-              onDoubleClick={() => onChange(removeKeyFromNode(root, node.id, index))}
-              title="Drag to move. Double-click to remove."
+              title="Drag to another node or to trash."
             >
               {key}
             </button>
           ))}
         </div>
-        <div className="node-controls">
-          <input
-            aria-label="Key to add"
-            inputMode="numeric"
-            value={newKey}
-            onChange={(event) => setNewKey(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") addKey();
-            }}
-            placeholder="key"
-          />
-          <button className="mini-button" onClick={addKey}>Add</button>
-          <button className="mini-button" onClick={() => onChange(addChildToNode(root, node.id))}>Child</button>
-          {canRemove && (
-            <button className="mini-button danger" onClick={() => onChange(removeChildFromNode(root, node.id))}>
-              Remove
-            </button>
-          )}
-        </div>
+        <div className="node-caption">{canRemove ? "Drag node to trash" : "Root: drop child here"}</div>
       </div>
 
       {node.children.length > 0 && (
@@ -849,13 +922,22 @@ function TreeView({ root, label }: { root: TreeNode; label: string }) {
   return (
     <div className="tree-view">
       <p>{label}</p>
-      {treeLevels(root).map((row, index) => (
-        <div className="tree-level" key={index}>
-          {row.map((node) => (
-            <div className="tree-node" key={node.id}>{node.keys.join(" | ")}</div>
+      <ReadOnlyTreeNode node={root} />
+    </div>
+  );
+}
+
+function ReadOnlyTreeNode({ node }: { node: TreeNode }) {
+  return (
+    <div className="readonly-node-wrap">
+      <div className="tree-node">{node.keys.join(" | ")}</div>
+      {node.children.length > 0 && (
+        <div className="readonly-children">
+          {node.children.map((child) => (
+            <ReadOnlyTreeNode key={child.id} node={child} />
           ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
