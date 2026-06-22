@@ -1059,6 +1059,247 @@ button.rb-node {
   font-weight: 850;
 }
 
+:root {
+  color-scheme: dark;
+  background: oklch(0.16 0.018 250);
+  color: oklch(0.91 0.012 245);
+}
+
+body {
+  background: oklch(0.16 0.018 250);
+}
+
+.app-shell {
+  background:
+    radial-gradient(circle at 20% 0%, oklch(0.24 0.035 250), transparent 34rem),
+    linear-gradient(180deg, oklch(0.17 0.02 250), oklch(0.12 0.016 250));
+}
+
+.sidebar,
+.topbar,
+.problem-panel,
+.answer-panel,
+.answer-modal {
+  border-color: oklch(0.34 0.022 245);
+  background: oklch(0.205 0.018 250);
+  color: oklch(0.9 0.012 245);
+  box-shadow: 0 1px 2px oklch(0.08 0.012 250 / 0.35);
+}
+
+.sidebar {
+  background: oklch(0.18 0.02 250);
+}
+
+.eyebrow,
+.topic svg,
+.tree-view p,
+.hint,
+.node-caption,
+.empty-node,
+.quiz-part small,
+.expected-quiz span,
+.modal-summary,
+.explanation-list span,
+.builder-palette label,
+.detach-tray span,
+.detach-tray p,
+.stat-primary p,
+.stat-grid span {
+  color: oklch(0.72 0.04 240);
+}
+
+h1,
+h2,
+h3,
+.stat-grid strong,
+.quiz-part span,
+.expected-quiz strong,
+.explanation-list strong {
+  color: oklch(0.96 0.006 245);
+}
+
+.topic {
+  color: oklch(0.86 0.014 245);
+}
+
+.topic:hover {
+  border-color: oklch(0.4 0.035 240);
+  background: oklch(0.25 0.024 250);
+}
+
+.topic.active,
+.scenario.active,
+.primary {
+  background: oklch(0.58 0.13 235);
+  color: oklch(0.985 0.004 245);
+}
+
+.topic.active {
+  border-color: oklch(0.64 0.12 235);
+}
+
+.topic.active svg {
+  color: oklch(0.9 0.06 235);
+}
+
+.stats,
+.stat-grid div,
+.meta-row span,
+.scenario-control,
+.icon-button,
+.secondary,
+.step-toolbar,
+.step-tab,
+.builder-palette,
+.color-toggle,
+.quiz-part,
+.expected-quiz div,
+.explanation-list li,
+.tree-view,
+.tree-canvas,
+.skip-visual,
+.skip-label,
+.letter-grid,
+.array-grid,
+.detach-tray,
+.loose-subtree-preview {
+  border-color: oklch(0.34 0.022 245);
+  background: oklch(0.235 0.018 250);
+  color: oklch(0.9 0.012 245);
+}
+
+.scenario {
+  color: oklch(0.82 0.018 245);
+}
+
+.scenario:hover,
+.secondary:hover,
+.icon-button:hover {
+  border-color: oklch(0.45 0.035 240);
+  background: oklch(0.29 0.024 250);
+}
+
+.primary:hover {
+  background: oklch(0.52 0.13 235);
+}
+
+.array-label,
+.array-cell,
+.array-input,
+.quiz-part input,
+.quiz-part select,
+.builder-palette input {
+  border-color: oklch(0.34 0.022 245);
+  background: oklch(0.18 0.016 250);
+  color: oklch(0.92 0.01 245);
+}
+
+.array-cell.muted,
+.step-tab.active,
+.rb-drop.filled,
+.skip-node.sentinel {
+  border-color: oklch(0.38 0.026 245);
+  background: oklch(0.27 0.022 250);
+  color: oklch(0.78 0.018 245);
+}
+
+.problem-panel pre {
+  color: oklch(0.88 0.014 245);
+}
+
+.trash-drop {
+  border-color: oklch(0.55 0.13 25);
+  background: oklch(0.24 0.045 25);
+  color: oklch(0.84 0.08 25);
+}
+
+.trash-drop:hover {
+  background: oklch(0.3 0.06 25);
+}
+
+.palette-chip,
+.key-chip,
+.tree-node,
+.skip-node {
+  border-color: oklch(0.58 0.09 235);
+  background: oklch(0.36 0.075 240);
+  color: oklch(0.94 0.01 245);
+}
+
+.palette-chip:hover,
+.key-chip:hover {
+  background: oklch(0.42 0.09 240);
+}
+
+.palette-chip.child {
+  border-color: oklch(0.58 0.07 155);
+  background: oklch(0.32 0.07 155);
+  color: oklch(0.92 0.03 155);
+}
+
+.edit-node {
+  border-color: oklch(0.45 0.035 245);
+  background: oklch(0.2 0.018 250);
+}
+
+.tree-lines line {
+  stroke: oklch(0.78 0.018 245);
+}
+
+.rb-node.black,
+.rb-palette-chip.black {
+  border-color: oklch(0.62 0.02 245);
+  background: oklch(0.13 0.014 245);
+  color: oklch(0.96 0.006 245);
+}
+
+.rb-node.red,
+.rb-palette-chip.red {
+  border-color: oklch(0.58 0.16 25);
+  background: oklch(0.48 0.16 25);
+  color: oklch(0.98 0.006 25);
+}
+
+.rb-drop {
+  border-color: oklch(0.52 0.07 225);
+  background: oklch(0.24 0.03 240);
+  color: oklch(0.82 0.04 235);
+}
+
+.color-toggle button {
+  color: oklch(0.8 0.018 245);
+}
+
+.color-toggle button.active {
+  background: oklch(0.38 0.025 245);
+  color: oklch(0.98 0.004 245);
+}
+
+.builder-palette h4,
+.detach-tray strong {
+  color: oklch(0.95 0.008 245);
+}
+
+.result.correct {
+  background: oklch(0.3 0.08 155);
+  color: oklch(0.9 0.08 155);
+}
+
+.result.wrong,
+.parse-error {
+  background: oklch(0.28 0.06 25);
+  color: oklch(0.9 0.075 25);
+}
+
+.modal-backdrop {
+  background: oklch(0.08 0.012 250 / 0.72);
+}
+
+.letter-cell {
+  border-color: oklch(0.34 0.022 245);
+  color: oklch(0.92 0.01 245);
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 232px minmax(0, 1fr);
