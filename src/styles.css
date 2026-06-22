@@ -135,6 +135,36 @@ h3 {
   align-items: flex-start;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.difficulty-control {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid oklch(0.82 0.015 235);
+  border-radius: 8px;
+  background: oklch(0.965 0.006 235);
+}
+
+.difficulty {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: oklch(0.38 0.018 245);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.difficulty.active {
+  background: oklch(0.52 0.13 225);
+  color: oklch(0.985 0.004 235);
+}
+
 .icon-button {
   display: inline-flex;
   align-items: center;
