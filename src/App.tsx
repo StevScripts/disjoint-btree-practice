@@ -2299,7 +2299,7 @@ function RBStepBuilder({
         </aside>
 
         <div>
-          <p className="hint">Use the side tray to detach subtrees. Trash removes only the dropped node and keeps its children in the tray. Drag loose pieces back onto L or R slots.</p>
+          <p className="hint">Use the side tray to detach subtrees. Trash removes only the dropped node and keeps its children in the tray. Drop beside a node to infer left or right, or use the L and R slots directly.</p>
           <EditableRBTree root={currentTree} onChange={updateCurrentTree} onAttachLoose={attachLooseSubtree} />
         </div>
       </div>
@@ -2318,9 +2318,51 @@ function EditableRBTree({
 }) {
   const layout = buildRBTreeLayout(root);
 
+  const dropNearNode = (event: DragEvent<HTMLDivElement>) => {
+    const payload = readDragPayload(event);
+    if (payload?.type !== "rb-palette-node" && payload?.type !== "rb-loose-node") return;
+
+    const stage = event.currentTarget.querySelector(".tree-stage");
+    const bounds = stage?.getBoundingClientRect();
+    if (!bounds) return;
+
+    const dropX = event.clientX - bounds.left;
+    const dropY = event.clientY - bounds.top;
+    const closest = layout.nodes
+      .map((layoutNode) => {
+        const nodeCenterX = layoutNode.x;
+        const nodeCenterY = layoutNode.y + RB_NODE_SIZE / 2;
+        return {
+          layoutNode,
+          distance: Math.hypot(dropX - nodeCenterX, dropY - nodeCenterY),
+        };
+      })
+      .sort((a, b) => a.distance - b.distance)[0];
+
+    if (!closest || closest.distance > 150) return;
+
+    const side = dropX < closest.layoutNode.x ? "left" : "right";
+    if (payload.type === "rb-palette-node") {
+      onChange(addRBChild(root, closest.layoutNode.node.id, side, payload.key, payload.color));
+    } else {
+      onAttachLoose(payload.looseId, closest.layoutNode.node.id, side);
+    }
+  };
+
   return (
-    <div className="tree-canvas" aria-label="Red-black tree drawing canvas">
-      <div className="tree-stage" style={{ width: layout.width, height: layout.height + 30 }}>
+    <div
+      className="tree-canvas"
+      aria-label="Red-black tree drawing canvas"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        dropNearNode(event);
+      }}
+    >
+      <div
+        className="tree-stage"
+        style={{ width: layout.width, height: layout.height + 30 }}
+      >
         <svg className="tree-lines" width={layout.width} height={layout.height + 30} aria-hidden="true">
           {layout.lines.map((line, index) => (
             <line key={`${line.x1}-${line.x2}-${index}`} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
@@ -2388,6 +2430,7 @@ function EditableRBNode({
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
               event.preventDefault();
+              event.stopPropagation();
               dropChild(side, readDragPayload(event));
             }}
           >
