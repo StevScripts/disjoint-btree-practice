@@ -520,6 +520,80 @@ button:disabled {
   background: oklch(0.94 0.045 25);
 }
 
+.detach-drop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px dashed oklch(0.55 0.08 225);
+  border-radius: 8px;
+  background: oklch(0.955 0.02 225);
+  color: oklch(0.28 0.035 245);
+}
+
+.detach-drop.has-pieces {
+  align-items: flex-start;
+}
+
+.detach-drop strong,
+.detach-drop span {
+  display: block;
+}
+
+.detach-drop strong {
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.detach-drop span {
+  margin-top: 2px;
+  color: oklch(0.42 0.018 245);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.loose-subtree-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.loose-subtree-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 900;
+}
+
+.loose-subtree-chip span {
+  margin: 0;
+  color: inherit;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.loose-subtree-chip.red {
+  border-color: oklch(0.48 0.16 25);
+  background: oklch(0.58 0.18 25);
+  color: oklch(0.985 0.004 25);
+}
+
+.loose-subtree-chip.black {
+  border-color: oklch(0.24 0.012 245);
+  background: oklch(0.2 0.012 245);
+  color: oklch(0.985 0.004 230);
+}
+
 .tree-workbench {
   display: grid;
   grid-template-columns: 164px minmax(0, 1fr);
@@ -1045,6 +1119,16 @@ button.rb-node {
 
   .tree-workbench {
     display: grid;
+  }
+
+  .detach-drop {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .loose-subtree-list {
+    justify-content: flex-start;
+    min-width: 0;
   }
 
   .builder-palette {

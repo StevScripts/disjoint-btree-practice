@@ -78,7 +78,8 @@ type DragPayload =
   | { type: "new-child" }
   | { type: "tree-node"; nodeId: string }
   | { type: "rb-palette-node"; key: number; color: RBColor }
-  | { type: "rb-node"; nodeId: string };
+  | { type: "rb-node"; nodeId: string }
+  | { type: "rb-loose-node"; looseId: string };
 
 type LayoutNode = {
   node: TreeNode;
@@ -1586,8 +1587,28 @@ function addRBChild(root: RBNode, nodeId: string, side: "left" | "right", key: n
   }));
 }
 
+function attachRBSubtree(
+  root: RBNode,
+  nodeId: string,
+  side: "left" | "right",
+  subtree: RBNode,
+): { tree: RBNode; replaced: RBNode | null } {
+  let replaced: RBNode | null = null;
+  const tree = updateRBNode(root, nodeId, (node) => {
+    replaced = node[side] ? cloneRBTree(node[side]) : null;
+    return { ...node, [side]: cloneRBTree(subtree)! };
+  });
+  return { tree, replaced };
+}
+
 function setRBColor(root: RBNode, nodeId: string, color: RBColor): RBNode {
   return updateRBNode(root, nodeId, (node) => ({ ...node, color }));
+}
+
+function findRBNode(root: RBNode | null, nodeId: string): RBNode | null {
+  if (!root) return null;
+  if (root.id === nodeId) return root;
+  return findRBNode(root.left, nodeId) ?? findRBNode(root.right, nodeId);
 }
 
 function removeRBNode(root: RBNode, nodeId: string): RBNode | null {
@@ -1596,6 +1617,15 @@ function removeRBNode(root: RBNode, nodeId: string): RBNode | null {
     ...root,
     left: root.left?.id === nodeId ? null : root.left ? removeRBNode(root.left, nodeId) : null,
     right: root.right?.id === nodeId ? null : root.right ? removeRBNode(root.right, nodeId) : null,
+  };
+}
+
+function detachRBNode(root: RBNode, nodeId: string): { tree: RBNode | null; detached: RBNode | null } {
+  const detached = findRBNode(root, nodeId);
+  if (!detached) return { tree: root, detached: null };
+  return {
+    tree: removeRBNode(root, nodeId),
+    detached: cloneRBTree(detached),
   };
 }
 
@@ -2112,6 +2142,11 @@ function RBStepBuilder({
   const currentTree = steps[currentStep];
   const [paletteKey, setPaletteKey] = useState("");
   const [paletteColor, setPaletteColor] = useState<RBColor>("red");
+  const [looseSubtrees, setLooseSubtrees] = useState<RBNode[]>([]);
+
+  useEffect(() => {
+    setLooseSubtrees([]);
+  }, [currentStep, steps.length]);
 
   const updateCurrentTree = (tree: RBNode | null) => {
     if (!tree) {
@@ -2146,6 +2181,25 @@ function RBStepBuilder({
     if (!payload || payload.type !== "rb-node") return;
     const next = removeRBNode(currentTree, payload.nodeId);
     if (next) updateCurrentTree(next);
+  };
+
+  const detachToWorkbench = (payload: DragPayload | null) => {
+    if (!payload || payload.type !== "rb-node" || payload.nodeId === currentTree.id) return;
+    const result = detachRBNode(currentTree, payload.nodeId);
+    if (!result.tree || !result.detached) return;
+    updateCurrentTree(result.tree);
+    setLooseSubtrees((items) => [...items, result.detached!]);
+  };
+
+  const attachLooseSubtree = (looseId: string, targetId: string, side: "left" | "right") => {
+    const subtree = looseSubtrees.find((item) => item.id === looseId);
+    if (!subtree) return;
+    const result = attachRBSubtree(currentTree, targetId, side, subtree);
+    updateCurrentTree(result.tree);
+    setLooseSubtrees((items) => [
+      ...items.filter((item) => item.id !== looseId),
+      ...(result.replaced ? [result.replaced] : []),
+    ]);
   };
 
   return (
@@ -2185,6 +2239,36 @@ function RBStepBuilder({
         Drop RB nodes here
       </div>
 
+      <div
+        className={looseSubtrees.length > 0 ? "detach-drop has-pieces" : "detach-drop"}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          detachToWorkbench(readDragPayload(event));
+        }}
+      >
+        <div>
+          <strong>Loose subtrees</strong>
+          <span>Drag a non-root node here to detach it, then drop it on an L or R slot.</span>
+        </div>
+        {looseSubtrees.length > 0 && (
+          <div className="loose-subtree-list">
+            {looseSubtrees.map((subtree) => (
+              <button
+                className={`loose-subtree-chip ${subtree.color}`}
+                draggable
+                key={subtree.id}
+                onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.id })}
+                title="Drag this subtree onto a left or right slot."
+              >
+                {subtree.key}
+                {(subtree.left || subtree.right) && <span>subtree</span>}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="tree-workbench">
         <aside className="builder-palette">
           <h4>Palette</h4>
@@ -2212,15 +2296,23 @@ function RBStepBuilder({
         </aside>
 
         <div>
-          <p className="hint">Drag a colored key from the palette onto a left or right drop target. Toggle colors on nodes. Drag a node to trash to delete that whole subtree.</p>
-          <EditableRBTree root={currentTree} onChange={updateCurrentTree} />
+          <p className="hint">Drag a node to Loose subtrees to detach it. Drag loose subtrees back onto L or R slots. Dropping onto a filled slot swaps the old child into the loose area.</p>
+          <EditableRBTree root={currentTree} onChange={updateCurrentTree} onAttachLoose={attachLooseSubtree} />
         </div>
       </div>
     </div>
   );
 }
 
-function EditableRBTree({ root, onChange }: { root: RBNode; onChange: (tree: RBNode | null) => void }) {
+function EditableRBTree({
+  root,
+  onChange,
+  onAttachLoose,
+}: {
+  root: RBNode;
+  onChange: (tree: RBNode | null) => void;
+  onAttachLoose: (looseId: string, targetId: string, side: "left" | "right") => void;
+}) {
   const layout = buildRBTreeLayout(root);
 
   return (
@@ -2238,6 +2330,7 @@ function EditableRBTree({ root, onChange }: { root: RBNode; onChange: (tree: RBN
             node={layoutNode.node}
             layoutNode={layoutNode}
             onChange={onChange}
+            onAttachLoose={onAttachLoose}
           />
         ))}
       </div>
@@ -2250,15 +2343,21 @@ function EditableRBNode({
   node,
   layoutNode,
   onChange,
+  onAttachLoose,
 }: {
   root: RBNode;
   node: RBNode;
   layoutNode: RBLayoutNode;
   onChange: (tree: RBNode | null) => void;
+  onAttachLoose: (looseId: string, targetId: string, side: "left" | "right") => void;
 }) {
   const dropChild = (side: "left" | "right", payload: DragPayload | null) => {
-    if (payload?.type !== "rb-palette-node") return;
-    onChange(addRBChild(root, node.id, side, payload.key, payload.color));
+    if (payload?.type === "rb-palette-node") {
+      onChange(addRBChild(root, node.id, side, payload.key, payload.color));
+    }
+    if (payload?.type === "rb-loose-node") {
+      onAttachLoose(payload.looseId, node.id, side);
+    }
   };
 
   return (
