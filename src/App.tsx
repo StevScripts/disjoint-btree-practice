@@ -1589,6 +1589,18 @@ function moveSubtreeToNode(root: TreeNode, nodeId: string, targetId: string, ind
   return insertChildToNode(withoutSubtree, targetId, cloneTree(subtree), index);
 }
 
+function mergeSubtreeIntoNode(root: TreeNode, nodeId: string, targetId: string): TreeNode {
+  if (nodeId === root.id || nodeId === targetId) return root;
+  const subtree = findTreeNode(root, nodeId);
+  if (!subtree || findTreeNode(subtree, targetId)) return root;
+  const withoutSubtree = removeChildFromNode(root, nodeId);
+  return updateTreeNode(withoutSubtree, targetId, (node) => ({
+    ...node,
+    keys: [...node.keys, ...subtree.keys].sort((a, b) => a - b),
+    children: [...node.children, ...subtree.children.map(cloneTree)],
+  }));
+}
+
 function clearChildrenFromNode(root: TreeNode, nodeId: string): TreeNode {
   return updateTreeNode(root, nodeId, (node) => ({
     ...node,
@@ -2886,7 +2898,7 @@ function TreeStepBuilder({
         </aside>
 
         <div>
-          <p className="hint">Drop a key on a node to add it there, or below a node to create a child. Drag a whole node below another node to move that entire subtree.</p>
+          <p className="hint">Drop a key on a node to add it there, or below a node to create a child. Drag a whole node onto another node to group them, or below it to move the subtree as a child.</p>
           <EditableTree root={currentTree} onChange={updateCurrentTree} />
         </div>
       </div>
@@ -2972,7 +2984,11 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
     }
 
     if (payload.type === "tree-node") {
-      onChange(moveSubtreeToNode(root, payload.nodeId, closest.layoutNode.node.id, childIndex));
+      onChange(
+        shouldCreateChild
+          ? moveSubtreeToNode(root, payload.nodeId, closest.layoutNode.node.id, childIndex)
+          : mergeSubtreeIntoNode(root, payload.nodeId, closest.layoutNode.node.id),
+      );
     }
   };
 
@@ -3029,6 +3045,7 @@ function EditableTreeNode({
   return (
     <div
       className="edit-node positioned-node"
+      data-node-id={node.id}
       draggable
       style={{
         width: layoutNode.width,
