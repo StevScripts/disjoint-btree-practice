@@ -1612,6 +1612,15 @@ function removeRBNode(root: RBNode, nodeId: string): RBNode | null {
   };
 }
 
+function removeRBNodeKeepChildren(root: RBNode, nodeId: string): { tree: RBNode | null; loose: RBNode[] } {
+  const target = findRBNode(root, nodeId);
+  const loose = [target?.left, target?.right].filter((child): child is RBNode => child !== null && child !== undefined).map((child) => cloneRBTree(child)!);
+  return {
+    tree: removeRBNode(root, nodeId),
+    loose,
+  };
+}
+
 function detachRBNode(root: RBNode, nodeId: string): { tree: RBNode | null; detached: RBNode | null } {
   const detached = findRBNode(root, nodeId);
   if (!detached) return { tree: root, detached: null };
@@ -2171,8 +2180,12 @@ function RBStepBuilder({
 
   const handleTrashDrop = (payload: DragPayload | null) => {
     if (!payload || payload.type !== "rb-node") return;
-    const next = removeRBNode(currentTree, payload.nodeId);
-    if (next) updateCurrentTree(next);
+    if (payload.nodeId === currentTree.id) return;
+    const result = removeRBNodeKeepChildren(currentTree, payload.nodeId);
+    if (result.tree) updateCurrentTree(result.tree);
+    if (result.loose.length > 0) {
+      setLooseSubtrees((items) => [...items, ...result.loose]);
+    }
   };
 
   const detachToWorkbench = (payload: DragPayload | null) => {
@@ -2228,7 +2241,7 @@ function RBStepBuilder({
         }}
       >
         <Trash2 size={18} />
-        Drop RB nodes here
+        Drop RB node here, children move to tray
       </div>
 
       <div className="tree-workbench">
@@ -2286,7 +2299,7 @@ function RBStepBuilder({
         </aside>
 
         <div>
-          <p className="hint">Use the side tray to detach subtrees. Drag loose pieces back onto L or R slots. Dropping onto a filled slot swaps the old child into the tray.</p>
+          <p className="hint">Use the side tray to detach subtrees. Trash removes only the dropped node and keeps its children in the tray. Drag loose pieces back onto L or R slots.</p>
           <EditableRBTree root={currentTree} onChange={updateCurrentTree} onAttachLoose={attachLooseSubtree} />
         </div>
       </div>
