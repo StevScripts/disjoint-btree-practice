@@ -759,6 +759,25 @@ button:focus-visible {
   stroke-width: 1.8;
 }
 
+.empty-rb-root {
+  position: absolute;
+  left: 180px;
+  top: 90px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 260px;
+  min-height: 120px;
+  padding: 18px;
+  border: 2px dashed oklch(0.55 0.08 230 / 0.55);
+  border-radius: var(--radius);
+  background: oklch(0.15 0.018 250 / 0.72);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 780;
+  text-align: center;
+}
+
 .tree-workbench {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
