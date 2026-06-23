@@ -1407,6 +1407,18 @@ function generateRBInsert(rng: () => number, seed: number, scenario: Scenario): 
   };
 }
 
+function rbDeleteGuidance(scenario: Scenario) {
+  const guidance: Partial<Record<Scenario, string>> = {
+    Basic: "Show the BST removal first. If a red node is removed, stop after the removal. If a black node is removed, mark the missing black position and repair from there.",
+    BlackLeaf: "Show the black leaf removal, then track the double-black or missing-black position. If the sibling has no red child, recolor the sibling and move the problem upward as needed.",
+    SiblingRed: "Show the red sibling case first: recolor the sibling and parent, rotate through the parent, then continue with the new sibling case.",
+    Borrow: "Show the borrow case where the sibling has an outside red child. Recolor around the parent and sibling, rotate once through the parent, and finish with equal black height.",
+    DoubleRotate: "Show the inside-red-child case. Rotate the sibling first to turn it into an outside-red-child borrow case, then rotate through the parent and recolor.",
+    Cascade: "Show each upward move of the missing black. Recolor black siblings with black children, move the repair to the parent, and stop when a red parent absorbs it or the root is reached.",
+  };
+  return guidance[scenario] ?? guidance.Basic!;
+}
+
 function generateRBDelete(rng: () => number, seed: number, scenario: Scenario): Problem {
   const target =
     scenario === "BlackLeaf"
@@ -1426,7 +1438,7 @@ function generateRBDelete(rng: () => number, seed: number, scenario: Scenario): 
     id: `RBD-${seed}`,
     kind: "rb-delete",
     title: `${SCENARIO_LABELS[scenario]} Red-Black Deletion`,
-    prompt: `Delete ${generated.value}. If the removed node is black, show the black-height repair. Pay attention to the sibling color, inside or outside red children, rotations, and final recoloring.`,
+    prompt: `Delete ${generated.value}. ${rbDeleteGuidance(scenario)} Pay attention to the sibling color, inside or outside red children, rotations, and final recoloring.`,
     scenario,
     trace: generated.tree.trace,
     answerType: "rb",
@@ -2014,7 +2026,7 @@ function buildExplanation(problem: Problem) {
         ? "First remove or replace the target key. The important part is repairing any child with too few keys: borrow from a sibling when possible, otherwise merge through the parent."
         : problem.kind === "rb-insert"
           ? "Insert the new key as red. If that creates a red parent with a red child, repair by checking the uncle: recolor for a red uncle, rotate for a black uncle, and finish with a black root."
-          : "After deletion, only black-height changes need repair. Work from the missing black position, inspect the sibling, then recolor or rotate until every root-to-leaf path has the same black count.";
+          : `After deletion, only black-height changes need repair. ${rbDeleteGuidance(problem.scenario)}`;
 
   return {
     heading: "What changes at each tree step",
