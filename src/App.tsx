@@ -160,6 +160,7 @@ type Stats = {
 type DsStep = {
   parents: number[];
   positions: DsPosition[];
+  edges: DsEdge[];
 };
 
 const TOPICS: { id: Topic; label: string; icon: typeof Network }[] = [
@@ -1744,7 +1745,7 @@ function App() {
     if (problem.answerType === "array") {
       const initialParents = range(problem.expectedArray?.length ?? 0);
       setArrayAnswer(initialParents);
-      setDsSteps([{ parents: initialParents, positions: initialDsPositions(initialParents.length) }]);
+      setDsSteps([{ parents: initialParents, positions: initialDsPositions(initialParents.length), edges: [] }]);
       setQuizAnswers({});
       setTreeSteps([]);
       setRbSteps([]);
@@ -2172,21 +2173,14 @@ function ArrayView({ indexes, values }: { indexes: number[]; values: number[] })
   );
 }
 
-function createsDsCycle(parents: number[], child: number, parent: number) {
-  let current = parent;
-  const seen = new Set<number>();
-  while (!seen.has(current)) {
-    if (current === child) return true;
-    seen.add(current);
-    if (parents[current] === current) return false;
-    current = parents[current];
-  }
-  return true;
-}
-
 type DsPosition = {
   x: number;
   y: number;
+};
+
+type DsEdge = {
+  from: number;
+  to: number;
 };
 
 function initialDsPositions(count: number): DsPosition[] {
@@ -2216,10 +2210,11 @@ function DisjointSetBuilder({
   const [selected, setSelected] = useState<number | null>(null);
   const [mode, setMode] = useState<"move" | "connect">("move");
   const [dragging, setDragging] = useState<{ index: number; offsetX: number; offsetY: number } | null>(null);
-  const fallbackStep = { parents: range(indexes.length), positions: initialDsPositions(indexes.length) };
+  const fallbackStep = { parents: range(indexes.length), positions: initialDsPositions(indexes.length), edges: [] };
   const step = steps[currentStep] ?? fallbackStep;
   const effectiveParents = step.parents.length === indexes.length ? step.parents : range(indexes.length);
   const positions = step.positions.length === indexes.length ? step.positions : initialDsPositions(indexes.length);
+  const edges = step.edges ?? [];
   const nodeSize = 46;
   const canvasWidth = Math.max(720, positions.reduce((max, position) => Math.max(max, position.x + 90), 0));
   const canvasHeight = Math.max(420, positions.reduce((max, position) => Math.max(max, position.y + 90), 0));
@@ -2234,17 +2229,25 @@ function DisjointSetBuilder({
   };
 
   const updateParents = (parents: number[]) => {
-    updateCurrentStep({ parents, positions });
+    updateCurrentStep({ parents, positions, edges });
   };
 
   const updatePositions = (nextPositions: DsPosition[]) => {
-    updateCurrentStep({ parents: effectiveParents, positions: nextPositions });
+    updateCurrentStep({ parents: effectiveParents, positions: nextPositions, edges });
+  };
+
+  const updateEdges = (nextEdges: DsEdge[]) => {
+    updateCurrentStep({ parents: effectiveParents, positions, edges: nextEdges });
   };
 
   const addStep = () => {
     const next = [
       ...steps.slice(0, currentStep + 1),
-      { parents: [...effectiveParents], positions: positions.map((position) => ({ ...position })) },
+      {
+        parents: [...effectiveParents],
+        positions: positions.map((position) => ({ ...position })),
+        edges: edges.map((edge) => ({ ...edge })),
+      },
     ];
     onStepsChange(next);
     onCurrentStepChange(next.length - 1);
@@ -2259,12 +2262,11 @@ function DisjointSetBuilder({
     setSelected(null);
   };
 
-  const setParent = (child: number, parent: number) => {
-    if (child < 0 || parent < 0 || child >= effectiveParents.length || parent >= effectiveParents.length) return;
-    if (child !== parent && createsDsCycle(effectiveParents, child, parent)) return;
-    const next = [...effectiveParents];
-    next[child] = parent;
-    updateParents(next);
+  const toggleEdge = (from: number, to: number) => {
+    if (from < 0 || to < 0 || from >= indexes.length || to >= indexes.length || from === to) return;
+    const [a, b] = from < to ? [from, to] : [to, from];
+    const exists = edges.some((edge) => edge.from === a && edge.to === b);
+    updateEdges(exists ? edges.filter((edge) => edge.from !== a || edge.to !== b) : [...edges, { from: a, to: b }]);
     setSelected(null);
   };
 
@@ -2274,7 +2276,7 @@ function DisjointSetBuilder({
       setSelected(index);
       return;
     }
-    setParent(selected, index);
+    toggleEdge(selected, index);
   };
 
   const canvasPoint = (event: PointerEvent<HTMLButtonElement>) => {
@@ -2352,11 +2354,8 @@ function DisjointSetBuilder({
             Connect
           </button>
         </div>
-        <span>{mode === "move" ? "Drag nodes anywhere" : selected === null ? "Select child, then parent" : `Node ${selected}: choose parent`}</span>
+        <span>{mode === "move" ? "Drag nodes anywhere" : selected === null ? "Select two nodes to connect or disconnect" : `Node ${selected}: choose another node`}</span>
         <div className="panel-tools">
-          <button className="secondary compact" onClick={() => selected !== null && setParent(selected, selected)} disabled={selected === null || mode !== "connect"}>
-            Make root
-          </button>
           <button className="secondary compact" onClick={() => setSelected(null)} disabled={selected === null}>
             Cancel
           </button>
@@ -2364,7 +2363,7 @@ function DisjointSetBuilder({
             Arrange
           </button>
           <button className="secondary compact" onClick={() => {
-            updateParents(range(indexes.length));
+            updateEdges([]);
             setSelected(null);
           }}>
             Clear edges
@@ -2374,13 +2373,13 @@ function DisjointSetBuilder({
       <div className="ds-canvas" ref={canvasRef} aria-label="Disjoint set freeform builder">
         <div className="ds-stage" style={{ width: canvasWidth, height: canvasHeight }}>
           <svg className="tree-lines" width={canvasWidth} height={canvasHeight} aria-hidden="true">
-            {effectiveParents.map((parent, child) => parent !== child && positions[parent] && positions[child] ? (
+            {edges.map((edge) => positions[edge.from] && positions[edge.to] ? (
               <line
-                key={`${child}-${parent}`}
-                x1={positions[parent].x + nodeSize / 2}
-                y1={positions[parent].y + nodeSize / 2}
-                x2={positions[child].x + nodeSize / 2}
-                y2={positions[child].y + nodeSize / 2}
+                key={`${edge.from}-${edge.to}`}
+                x1={positions[edge.from].x + nodeSize / 2}
+                y1={positions[edge.from].y + nodeSize / 2}
+                x2={positions[edge.to].x + nodeSize / 2}
+                y2={positions[edge.to].y + nodeSize / 2}
               />
             ) : null)}
             {selected !== null && positions[selected] && (
@@ -2397,7 +2396,6 @@ function DisjointSetBuilder({
               className={[
                 "ds-node",
                 selected === index ? "selected" : "",
-                effectiveParents[index] === index ? "root" : "",
                 mode === "move" ? "move-mode" : "connect-mode",
               ].filter(Boolean).join(" ")}
               key={index}
@@ -2412,7 +2410,7 @@ function DisjointSetBuilder({
                 width: nodeSize,
                 height: nodeSize,
               }}
-              title={effectiveParents[index] === index ? `Node ${index} is a root` : `Parent: ${effectiveParents[index]}`}
+              title={mode === "connect" ? `Connect or disconnect node ${index}` : `Move node ${index}`}
             >
               {index}
             </button>
@@ -2987,9 +2985,17 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
 
     const dropX = event.clientX - bounds.left;
     const dropY = event.clientY - bounds.top;
+    const directNodeId = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-node-id]")?.dataset.nodeId
+      : undefined;
+    const directTarget = directNodeId
+      ? layout.nodes.find((layoutNode) => layoutNode.node.id === directNodeId)
+      : undefined;
+    const directTargetCandidate = directTarget ? { layoutNode: directTarget, distance: 0 } : undefined;
     const belowParent = layout.nodes
       .filter((layoutNode) => (
-        dropY > layoutNode.y + TREE_NODE_HEIGHT + 12
+        layoutNode.node.id !== directNodeId
+        && dropY > layoutNode.y + TREE_NODE_HEIGHT + 12
         && Math.abs(dropX - layoutNode.x) <= Math.max(120, layoutNode.width / 2 + 90)
       ))
       .map((layoutNode) => ({
@@ -3000,7 +3006,7 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
       }))
       .sort((a, b) => (a.verticalGap - b.verticalGap) || (a.horizontalGap - b.horizontalGap))[0];
 
-    const closest = belowParent ?? layout.nodes
+    const closest = directTargetCandidate ?? belowParent ?? layout.nodes
       .map((layoutNode) => {
         const nodeCenterX = layoutNode.x;
         const nodeCenterY = layoutNode.y + TREE_NODE_HEIGHT / 2;
@@ -3011,16 +3017,17 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
       })
       .sort((a, b) => a.distance - b.distance)[0];
 
-    if (!closest || (!belowParent && closest.distance > 170)) return;
+    if (!closest || (!directTargetCandidate && !belowParent && closest.distance > 170)) return;
 
-    const shouldCreateChild = Boolean(belowParent) || dropY > closest.layoutNode.y + TREE_NODE_HEIGHT + 12;
-    const childIndex = inferChildIndex(closest.layoutNode, dropX);
+    const targetNode = closest.layoutNode;
+    const shouldCreateChild = !directTargetCandidate && (Boolean(belowParent) || dropY > targetNode.y + TREE_NODE_HEIGHT + 12);
+    const childIndex = inferChildIndex(targetNode, dropX);
 
     if (payload.type === "palette-key") {
       onChange(
         shouldCreateChild
-          ? addKeyChildToNode(root, closest.layoutNode.node.id, payload.key, childIndex)
-          : addKeyToNode(root, closest.layoutNode.node.id, payload.key),
+          ? addKeyChildToNode(root, targetNode.node.id, payload.key, childIndex)
+          : addKeyToNode(root, targetNode.node.id, payload.key),
       );
     }
 
@@ -3031,24 +3038,24 @@ function EditableTree({ root, onChange }: { root: TreeNode; onChange: (tree: Tre
       const withoutKey = removeKeyFromNode(root, payload.fromId, payload.fromIndex);
       onChange(
         shouldCreateChild
-          ? addKeyChildToNode(withoutKey, closest.layoutNode.node.id, movedKey, childIndex)
-          : addKeyToNode(withoutKey, closest.layoutNode.node.id, movedKey),
+          ? addKeyChildToNode(withoutKey, targetNode.node.id, movedKey, childIndex)
+          : addKeyToNode(withoutKey, targetNode.node.id, movedKey),
       );
     }
 
     if (payload.type === "new-child") {
       onChange(
         shouldCreateChild
-          ? addEmptyChildToNode(root, closest.layoutNode.node.id, childIndex)
-          : addChildToNode(root, closest.layoutNode.node.id),
+          ? addEmptyChildToNode(root, targetNode.node.id, childIndex)
+          : addChildToNode(root, targetNode.node.id),
       );
     }
 
     if (payload.type === "tree-node") {
       onChange(
         shouldCreateChild
-          ? moveSubtreeToNode(root, payload.nodeId, closest.layoutNode.node.id, childIndex)
-          : mergeSubtreeIntoNode(root, payload.nodeId, closest.layoutNode.node.id),
+          ? moveSubtreeToNode(root, payload.nodeId, targetNode.node.id, childIndex)
+          : mergeSubtreeIntoNode(root, payload.nodeId, targetNode.node.id),
       );
     }
   };
