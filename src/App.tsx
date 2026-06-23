@@ -2713,8 +2713,12 @@ function EditableRBTree({
   onMoveLoose: (looseId: string, x: number, y: number) => void;
 }) {
   const layout = root ? buildRBTreeLayout(root) : { nodes: [], lines: [], width: 620, height: 320 };
-  const looseStageWidth = looseSubtrees.reduce((max, item) => Math.max(max, item.x + 180), 0);
-  const looseStageHeight = looseSubtrees.reduce((max, item) => Math.max(max, item.y + 160), 0);
+  const looseLayouts = looseSubtrees.map((item) => ({
+    ...item,
+    layout: buildRBTreeLayout(item.node),
+  }));
+  const looseStageWidth = looseLayouts.reduce((max, item) => Math.max(max, item.x + item.layout.width + 28), 0);
+  const looseStageHeight = looseLayouts.reduce((max, item) => Math.max(max, item.y + item.layout.height + 56), 0);
   const stageWidth = Math.max(layout.width, looseStageWidth, 620);
   const stageHeight = Math.max(layout.height + 30, looseStageHeight, 320);
 
@@ -2832,12 +2836,12 @@ function EditableRBTree({
             onAttachLoose={onAttachLoose}
           />
         ))}
-        {looseSubtrees.map((subtree) => (
+        {looseLayouts.map((subtree) => (
           <div
             className="rb-loose-canvas-piece positioned-node"
             key={subtree.node.id}
             draggable
-            style={{ left: subtree.x, top: subtree.y }}
+            style={{ left: subtree.x, top: subtree.y, width: subtree.layout.width + 16 }}
             onDragStart={(event) => writeDragPayload(event, { type: "rb-loose-node", looseId: subtree.node.id })}
             title="Unattached subtree. Drag near a node to reattach, or onto another loose subtree."
           >
